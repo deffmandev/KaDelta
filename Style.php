@@ -117,10 +117,37 @@ body
 
 .TitreGroupe
 {
-    position: absolute;
-    top: 113px;
-    left: 140px;
-
+     position: absolute;
+    top: 78px;
+    left: 159px;
+    display: flex;
+    flex-direction: row;
+    align-content: center;
+    justify-content: center;
 }
+
+
+.groupe-btn 
+{
+    background: linear-gradient(90deg, #6a11cb 0%, #2575fc 100%);
+    color: #fff;
+    padding: 16px 36px;
+    border: none;
+    border-radius: 20px;
+    font-size: 1.2rem;
+    font-weight: bold;
+    box-shadow: 2px 3px 20px rgba(38, 50, 56, 0.2);
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+    outline: none;
+    letter-spacing: 1px;
+    margin-right: 3em;
+}
+.groupe-btn:hover, .groupe-btn:hover 
+        {
+            transform: translateY(-2px) scale(1.04);
+            box-shadow: 0 8px 32px rgba(38, 50, 56, 0.25);
+            background: linear-gradient(90deg, #2575fc 0%, #6a11cb 100%);
+        }
 
 </style>
