@@ -1,6 +1,6 @@
 <?php
 
-function connectModbusTcp($ip, $port = 502, $timeout = 0.02) {
+function connectModbusTcp($ip, $port = 502, $timeout = 0.20) {
     $socket = @fsockopen($ip, $port, $errno, $errstr, $timeout);
     return $socket;
 }

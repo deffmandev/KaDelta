@@ -82,8 +82,8 @@ while ($row = sqlnext($resultUnite))
         $SetRoom=0;
         $CodeErreur=100060;
     }
-        mssql("DELETE FROM [ValUnites] Where Id_Unite=$Id");
-        mssql("INSERT INTO [ValUnites] (Id_Unite, OnOff, Alarm, Mode, Fan, Room, SetRoom, CodeErreur) VALUES ($Id,$OnOff,$Alarm,$Mode,$Fan,$Room,$SetRoom,$CodeErreur)");            
+        mssql("DELETE FROM [ValUnites] Where Id=$Id");
+        mssql("INSERT INTO [ValUnites] (Id, OnOff, Alarm, Mode, Fan, Room, SetRoom, CodeErreur) VALUES ($Id,$OnOff,$Alarm,$Mode,$Fan,$Room,$SetRoom,$CodeErreur)");            
 } 
 catch (Exception $e) {
     echo "Erreur : " . $e->getMessage();

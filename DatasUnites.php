@@ -3,7 +3,9 @@ header('Content-Type: application/json');
 
 include "Base.php";
 
-$sql = "SELECT * FROM  [ValUnites]";
+$sql = "SELECT vu.*, du.* FROM [DefUnites] vu JOIN [ValUnites] du ON vu.Id = du.Id";
+
+
 try {
     $stmt = mssql($sql);
 } catch (Exception $e) {

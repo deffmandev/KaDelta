@@ -2,20 +2,20 @@
 
 date_default_timezone_set('Europe/Paris');
 
-$serverName = "192.168.1.108,1433";
+$serverName = "localhost,1433";
 $connectionOptions = [
-    "Database" => "KA",
+    "Database" => "Ka",
     "Uid" => "BaseKa",
     "PWD" => "deffdeff",
     "CharacterSet" => "UTF-8",
 ];
+
 
 $conn = sqlsrv_connect($serverName, $connectionOptions);
 
 if ($conn === false) {
     die(print_r(sqlsrv_errors(), true));
 }
-
 
 function GetTable($tableName)
 {
@@ -118,8 +118,16 @@ function afficherListeTables()
 function updateTable($table, $field, $value, $whereField, $whereValue)
 {
     global $conn;
-    $sql = "UPDATE [$table] SET [$field] = ? WHERE [$whereField] = ?";
-    $params = [$value, $whereValue];
+    if ($whereValue==-1)
+        {
+        $sql = "UPDATE [$table] SET [$field] = ?";
+        $params = [$value];
+        }
+    else
+        {    
+        $sql = "UPDATE [$table] SET [$field] = ? WHERE [$whereField] = ?";
+        $params = [$value, $whereValue];
+        }
     $stmt = sqlsrv_query($conn, $sql, $params);
 
     if ($stmt === false) {

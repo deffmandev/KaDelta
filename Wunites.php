@@ -1,13 +1,19 @@
 <?php
 include "base.php";
 
+    if (isset($_GET["Groupe"]))
+        {
+            $GroupeActive=true;
+            $GroupeId=$_GET["Groupe"];
+        }
+    else
+            $GroupeActive=false;
+
+
     if (isset($_GET["IdSel"]))     
         $UniteId = $_GET["IdSel"];
     else 
         $UniteId = 1;
-
-$Groupe=false;
-
 
 
 // Récupération des noms de Modbus
@@ -38,7 +44,7 @@ if ($result)
         $unites = sqlnext($result);
 
         
-$result = mssql("SELECT * FROM [ValUnites] WHERE Id_Unite = $UniteId");
+$result = mssql("SELECT * FROM [ValUnites] WHERE Id = $UniteId");
 if ($result) 
         $valUnites = sqlnext($result);
 
@@ -288,7 +294,21 @@ Function RegistreOption($valeur)
         <svg class="settings-icon" id="settings-icon" viewBox="0 0 24 24" title="Paramétrage">
             <path d="M19.14,12.94a7.07,7.07,0,0,0,.06-1,7.07,7.07,0,0,0-.06-1l2.11-1.65a.5.5,0,0,0,.12-.65l-2-3.46a.5.5,0,0,0-.61-.22l-2.49,1a7,7,0,0,0-1.73-1l-.38-2.65A.5.5,0,0,0,13,2H11a.5.5,0,0,0-.5.42l-.38,2.65a7,7,0,0,0-1.73,1l-2.49-1a.5.5,0,0,0-.61.22l-2,3.46a.5.5,0,0,0,.12.65l2.11,1.65a7.07,7.07,0,0,0-.06,1,7.07,7.07,0,0,0,.06,1L2.86,14.59a.5.5,0,0,0-.12.65l2,3.46a.5.5,0,0,0,.61.22l2.49-1a7,7,0,0,0,1.73,1l.38,2.65A.5.5,0,0,0,11,22h2a.5.5,0,0,0,.5-.42l.38-2.65a7,7,0,0,0,1.73-1l2.49,1a.5.5,0,0,0,.61-.22l2-3.46a.5.5,0,0,0-.12-.65ZM12,15.5A3.5,3.5,0,1,1,15.5,12,3.5,3.5,0,0,1,12,15.5Z"/>
         </svg>
-        <h2 id="DeviceNameHtml" style="margin-top:-18px;margin-bottom:40px"><?php echo $unites["Name"];?></h2>
+        <?php
+            if ($GroupeActive === true) {
+                if ($GroupeId === "all") {
+                    echo '<h2 id="DeviceNameHtml" style="margin-top:-18px;margin-bottom:40px">GROUPE<br>toutes les unites</h2>';
+                } else {
+                    echo '<h2 id="DeviceNameHtml" style="margin-top:-18px;margin-bottom:40px">GROUPE<br>' . htmlspecialchars($groupNames[$GroupeId] ?? '') . '</h2>';
+                }
+            } elseif ($GroupeActive === null) {
+                // Affiche telle quelle la ligne actuelle
+                echo '<h2 id="DeviceNameHtml" style="margin-top:-18px;margin-bottom:40px">' . $unites["Name"] . '</h2>';
+            } else {
+                // Cas par défaut (pas de groupe actif)
+                echo '<h2 id="DeviceNameHtml" style="margin-top:-18px;margin-bottom:40px">' . $unites["Name"] . '</h2>';
+            }
+        ?>
         <div class="temp-controls">
             <button class="temp-btn" id="minus-btn">-</button>
             <span class="temp-value" id="temp-value"><?php echo $valUnites["SetRoom"];?></span>°C
@@ -314,10 +334,12 @@ Function RegistreOption($valeur)
     </div>
     <!-- Fenêtre Paramétrage -->
     <div class="modal" id="settings-modal" style="display:none;">
-        <!-- Icône clé à molette pour paramétrage avancé -->
-        <svg class="settings-icon" id="advanced-settings-icon" viewBox="0 0 24 24" title="Paramétrage avancé" style="position:absolute;top:18px;right:18px;">
-            <path d="M22.7 19.3l-4.1-4.1c1.1-1.7.9-4-0.6-5.5-1.5-1.5-3.8-1.7-5.5-0.6l-4.1-4.1c-0.4-0.4-1-0.4-1.4 0l-2.1 2.1c-0.4 0.4-0.4 1 0 1.4l4.1 4.1c-1.1 1.7-0.9 4 0.6 5.5 1.5 1.5 3.8 1.7 5.5 0.6l4.1 4.1c0.4 0.4 1 0.4 1.4 0l2.1-2.1c0.4-0.4 0.4-1 0-1.4zM7.1 6.7l1.4-1.4 3.5 3.5-1.4 1.4-3.5-3.5zm7.8 7.8c-1.1 1.1-2.9 1.1-4 0s-1.1-2.9 0-4 2.9-1.1 4 0 1.1 2.9 0 4zm3.5 3.5l-1.4 1.4-3.5-3.5 1.4-1.4 3.5 3.5z"/>
-        </svg>
+        <?php if (!$GroupeActive): ?>
+            <!-- Icône clé à molette pour paramétrage avancé -->
+            <svg class="settings-icon" id="advanced-settings-icon" viewBox="0 0 24 24" title="Paramétrage avancé" style="position:absolute;top:18px;right:18px;">
+                <path d="M22.7 19.3l-4.1-4.1c1.1-1.7.9-4-0.6-5.5-1.5-1.5-3.8-1.7-5.5-0.6l-4.1-4.1c-0.4-0.4-1-0.4-1.4 0l-2.1 2.1c-0.4 0.4-0.4 1 0 1.4l4.1 4.1c-1.1 1.7-0.9 4 0.6 5.5 1.5 1.5 3.8 1.7 5.5 0.6l4.1 4.1c0.4 0.4 1 0.4 1.4 0l2.1-2.1c0.4-0.4 0.4-1 0-1.4zM7.1 6.7l1.4-1.4 3.5 3.5-1.4 1.4-3.5-3.5zm7.8 7.8c-1.1 1.1-2.9 1.1-4 0s-1.1-2.9 0-4 2.9-1.1 4 0 1.1 2.9 0 4zm3.5 3.5l-1.4 1.4-3.5-3.5 1.4-1.4 3.5 3.5z"/>
+            </svg>
+        <?php endif; ?>
         <h2>Paramétrage</h2>
         <form class="settings-form">
             <div style="display:flex;align-items:center;gap:1.5em;margin-bottom:1.5em;">
@@ -411,6 +433,15 @@ Function RegistreOption($valeur)
                     </select>
                 </div>
             </div>
+
+            <div style="display:flex;align-items:center;gap:1.5em;margin-bottom:1em;">
+                <span class="conf-label">Device</span>
+                <div class="conf-field">
+                    <span>Adresse&nbsp;:</span>
+                    <input onchange='ChangeDEVICE()' type="number" id="Device-config" min="0" max="65535" value="<?php echo $unites['Device']; ?>">
+                </div>
+            </div>
+
             <div style="display:flex;align-items:center;gap:1.5em;margin-bottom:1em;">
                 <span class="conf-label">OnOff</span>
                 <div class="conf-field">
@@ -534,14 +565,18 @@ Function RegistreOption($valeur)
         settingsModal.style.display = 'none';
         mainModal.style.display = 'block';
     };
-    advancedSettingsIcon.onclick = () => {
-        settingsModal.style.display = 'none';
-        advancedModal.style.display = 'block';
-    };
-    closeAdvancedBtn.onclick = () => {
-        advancedModal.style.display = 'none';
-        settingsModal.style.display = 'block';
-    };
+
+    <?php if (!$GroupeActive): ?>
+        advancedSettingsIcon.onclick = () => {
+            settingsModal.style.display = 'none';
+            advancedModal.style.display = 'block';
+        };
+        
+        closeAdvancedBtn.onclick = () => {
+            advancedModal.style.display = 'none';
+            settingsModal.style.display = 'block';
+        };
+    <?php endif; ?>
     closeModalBtn.onclick = () => {
         modalBg.classList.remove('visible');
         setTimeout(() => {
@@ -636,6 +671,17 @@ Function RegistreOption($valeur)
 // Retourne une promesse qui se résout avec la réponse de l'API
 
     function updateTable(table, field, value, whereField, whereValue) {
+
+        // Si $GroupeActive est non null, on modifie whereField et whereValue
+        <?php if ($GroupeActive !== false && $GroupeActive !== null): ?>
+            whereField = 'Gr';
+            <?php if ($GroupeId === "all"): ?>
+            whereValue = "-1"; // Pour tous les groupes
+            <?php else: ?>
+            whereValue = <?php echo $GroupeId; ?>;
+            <?php endif; ?>
+        <?php endif; ?>
+
         const params = new URLSearchParams({
             table: table,
             field: field,
@@ -658,6 +704,7 @@ function ChangeProgramme()
 {
     const select = document.getElementById('schedule-select');
     const selectedValue = select.value;
+    
     updateTable('DefUnites', 'Prog', selectedValue, 'Id', IdUnite);
 }
 
@@ -684,6 +731,12 @@ function ChangeModbus()
     const select = document.getElementById('modbus-select');
     const selectedValue = select.value;
     updateTable('DefUnites', 'ModbusId', selectedValue, 'Id', IdUnite);
+}
+
+function ChangeDEVICE()
+{
+    const address = document.getElementById('Device-config').value;
+    updateTable('DefUnites', 'Device', address, 'Id', IdUnite);
 }
 
 // Fonction pour changer l'adresse et le type OnOff

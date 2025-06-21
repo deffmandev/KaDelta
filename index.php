@@ -12,13 +12,23 @@
 
 <div class="FrameTitre">
 
-<img src="LogoKaDelta.png" alt="Ka Delta Logo" style="width: 132px; height: auto;">
+<img src="Images/LogoKaDelta.png" alt="Ka Delta Logo" style="width: 132px; height: auto;">
 <h1>Ka Delta Modbus</h1>
 
 <div class="TitreGroupe">
-    <button id="btn-groupe" class="groupe-btn">Groupe</button>
-    <button class="groupe-btn">Action sur<br>groupe</button>
+  <button id="btn-groupe" class="groupe-btn">Groupe</button>
+  <button onclick="ClimGroupe()" class="groupe-btn">Action sur<br>groupe</button>
+  <button id="fullscreen-btn" class="groupe-btn">Plein écran</button>
 </div>
+<script>
+document.getElementById('fullscreen-btn').addEventListener('click', function() {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen();
+  } else {
+    document.exitFullscreen();
+  }
+});
+</script>
 
     
 </head>
@@ -59,7 +69,7 @@ try {
     
 echo "<div class='CadreUnites'>";
 
-for ($Nbmax=1;$Nbmax<256;$Nbmax++)
+for ($Nbmax=1;$Nbmax<400;$Nbmax++)
 {
     if (isset($names[$Nbmax])) 
 echo '
@@ -70,7 +80,20 @@ echo '
     <div class="ViT4"></div>
     <div class="ViT5">'.$GroupeIdGr[$Nbmax].'</div>
 </div>';
+
+else
+
+echo '
+<div onclick="ClimTest('.$Nbmax.')" class="Vignette ViOff" id="Vig'.$Nbmax.'" data-groupe="0" style="display:none;">
+    <div class="ViT1">'.$Nbmax.'</div>
+    <div class="ViT2"></div>
+    <div class="ViT3"></div>
+    <div class="ViT4"></div>
+    <div class="ViT5">0</div>
+</div>';
+
 }
+
 
 echo "</div>";
 
@@ -124,6 +147,7 @@ while ($row=sqlnext($basegroupe))
 </div>
 
 <script>
+// Gestion de la popup pour la sélection de groupe
 const btn = document.getElementById('btn-groupe');
 const popup = document.getElementById('popup-groupe');
 const overlay = document.getElementById('overlay-groupe');
@@ -196,10 +220,10 @@ document.querySelectorAll('.groupe-item').forEach(function(item) {
 function filtrerParGroupeNumero(numero) {
   const vignettes = document.querySelectorAll('.Vignette');
   vignettes.forEach(v => {
-    if (numero === null || numero === 'all') {
+    if (numero === null || numero === 'all' && v.getAttribute('data-groupe') !== "0") {
       v.style.display = 'block';
     } else {
-      if (v.getAttribute('data-groupe') === numero) {
+      if (v.getAttribute('data-groupe') === numero && v.getAttribute('data-groupe') !== "0") {
         v.style.display = 'block';
       } else {
         v.style.display = 'none';
@@ -207,7 +231,8 @@ function filtrerParGroupeNumero(numero) {
     }
   });
 }
-
+NumeroDeGroupeValide="all"
+// Filtrer par défaut pour afficher toutes les unités
 // Ferme la popup lors de la sélection d'un groupe (avec filtrage)
 document.querySelectorAll('.groupe-item').forEach(function(item) {
   item.addEventListener('click', function() {
@@ -215,8 +240,9 @@ document.querySelectorAll('.groupe-item').forEach(function(item) {
     overlay.style.display = 'none';
     // Filtrer par numéro de groupe (attribut data-numero)
     const numero = this.getAttribute('data-numero');
+    NumeroDeGroupeValide= numero; // Mettre à jour la variable globale
     if (numero === 'all') {
-      filtrerParGroupeNumero(null);
+      filtrerParGroupeNumero('all');
     } else {
       filtrerParGroupeNumero(numero);
     }
@@ -233,6 +259,15 @@ function ClimTest(IdSel)
     OSWunite.src = "Wunites.php?IdSel=" + IdSel;
    
 }
+
+function ClimGroupe()
+{
+    OverScreenWunites.style.display = "block";
+    console.log("Groupe ID:", NumeroDeGroupeValide);
+    OSWunite.src = "Wunites.php?Groupe=" + NumeroDeGroupeValide;
+
+}
+
 
 async function LoadDatas()
 {
@@ -253,11 +288,15 @@ async function LoadDatas()
 
 function UpdateVignettes(data) {
     data.forEach(item => {
-        const vignette = document.getElementById("Vig" + item.Id_Unite);
+        const vignette = document.getElementById("Vig" + item.Id);
         if (vignette) {
+            vignette.querySelector('.ViT1').textContent = item.Name;
             vignette.querySelector('.ViT2').textContent = item.Room + '°C';
             vignette.querySelector('.ViT3').textContent = item.SetRoom + '°C';
             vignette.querySelector('.ViT4').textContent = item.Fan;
+            vignette.querySelector('.ViT5').textContent = item.Gr;
+            vignette.setAttribute('data-groupe', item.Gr);
+            filtrerParGroupeNumero(NumeroDeGroupeValide);
             
             // Mettez à jour la classe de la vignette en fonction de l'état
             if (item.OnOff === 1) {

@@ -83,11 +83,16 @@ body
     font-family: math;
 }
 
+.ViT5
+{
+    display: none;
+}
+
 .CadreUnites
 {
     display: flex;
     flex-wrap: wrap;
-    width: 90%;
+    padding: 9px;
     margin: auto;
     flex-direction: row;
     justify-content: flex-start;
