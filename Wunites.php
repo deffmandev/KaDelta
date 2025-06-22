@@ -7,14 +7,24 @@ include "base.php";
             $GroupeId=$_GET["Groupe"];
         }
     else
+        {    
             $GroupeActive=false;
-
+            $GroupeId='0';
+        }
 
     if (isset($_GET["IdSel"]))     
         $UniteId = $_GET["IdSel"];
     else 
         $UniteId = 1;
 
+
+    echo '
+    <script>
+        GroupeId="'.$GroupeId.'";
+        GroupeActive='.($GroupeActive ? 'true' : 'false').';
+    </script>
+    ';
+    
 
 // Récupération des noms de Modbus
 $modbusNames = [];
@@ -594,12 +604,14 @@ Function RegistreOption($valeur)
         if (temp > minTemp) {
             temp--;
             document.getElementById('temp-value').textContent = temp;
+            SetModeBus(IdUnite,'Type_SetRoom','SetRoom', temp);
         }
     };
     document.getElementById('plus-btn').onclick = () => {
         if (temp < maxTemp) {
             temp++;
             document.getElementById('temp-value').textContent = temp;
+            SetModeBus(IdUnite,'Type_SetRoom','SetRoom', temp);
         }
     };
 
@@ -608,6 +620,37 @@ Function RegistreOption($valeur)
         btn.onclick = () => {
             document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('selected'));
             btn.classList.add('selected');
+            const mode = btn.getAttribute('data-mode');
+            let modeValue;
+            switch (mode) {
+                case 'off':
+                    modeValue = 0;
+                    break;
+                case 'chaud':
+                    modeValue = 5;
+                    break;
+                case 'froid':
+                    modeValue = 1;
+                    break;
+                case 'dry':
+                    modeValue = 2;
+                    break;
+                case 'fan':
+                    modeValue = 3;
+                    break;
+                case 'auto':
+                    modeValue = 4;
+                    break;
+            }
+            SetModeBus(IdUnite, 'Type_Mode', 'Mode', modeValue);
+
+            if (mode== 'off') {
+                SetModeBus(IdUnite, 'Type_OnOff', 'OnOff', 0); // Réinitialise la température à 0 si mode off
+            }
+            else {
+                SetModeBus(IdUnite, 'Type_OnOff', 'OnOff', 1); // Active l'unité si un mode est sélectionné
+            }
+
         };
     });
 
@@ -616,6 +659,24 @@ Function RegistreOption($valeur)
         btn.onclick = () => {
             document.querySelectorAll('.fan-btn').forEach(b => b.classList.remove('selected'));
             btn.classList.add('selected');
+            const fanSpeed = btn.getAttribute('data-fan');
+            let fanValue;
+            switch (fanSpeed) {
+                case 'auto':
+                    fanValue = 4;
+                    break;
+                case '1':
+                    fanValue = 1;
+                    break;
+                case '2':
+                    fanValue = 2;
+                    break;
+                case '3':
+                    fanValue = 3;
+                    break;
+            }   
+            SetModeBus(IdUnite, 'Type_Fan', 'Fan', fanValue);
+
         };
     });
 
@@ -653,6 +714,43 @@ Function RegistreOption($valeur)
     setupTempLimitBtns('cold-max', 'cold-max-minus', 'cold-max-plus', 10, 32,'LimiteClimH');
     setupTempLimitBtns('hot-min', 'hot-min-minus', 'hot-min-plus', 10, 32, 'LimiteChaudB');
     setupTempLimitBtns('hot-max', 'hot-max-minus', 'hot-max-plus', 10, 32, 'LimiteChaudH');
+
+// Fonction pour change valeur Modbus
+// Envoie une requête à l'API ModbusApi.php pour changer la valeur d'un registre Modbus
+// Utilise fetch pour envoyer la requête GET avec les paramètres IdUnite, Type, Idem et Valeur
+// Affiche la réponse dans la console pour le débogage
+// IdUnite : identifiant de l'unité
+// Type : type de registre Modbus (par exemple, 'Type_SetRoom')
+// Idem : identifiant du registre Modbus (par exemple, 'SetRoom')
+// Valeur : nouvelle valeur à écrire dans le registre Modbus
+// exemple d'utilisation : SetModeBus(1, 'Type_SetRoom', 'SetRoom', 22)
+// Cette fonction est appelée lorsque l'utilisateur change la température, le mode ou la ventilation
+
+function SetModeBus(IdUnite,Type,idem,valeur)
+{
+
+        const params = new URLSearchParams(
+        {
+            IdUnite: IdUnite,
+            GroupeActif: GroupeActive,
+            GroupeId: GroupeId,
+            Type: Type,
+            Idem: idem,
+            Valeur: valeur
+        });
+        
+        let responsetext = "";
+        fetch('ModbusApi.php?' + params.toString(), {
+            method: 'GET'
+        })
+        .then(response => response.text())
+        .then(text => {
+            responsetext = text;
+        })
+        .catch(error => {
+            console.error('Erreur lors de l\'appel ModbusApi:', error);
+        });
+}
 
 
 // Envoi des données de configuration

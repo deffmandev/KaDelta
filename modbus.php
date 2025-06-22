@@ -5,6 +5,12 @@ function connectModbusTcp($ip, $port = 502, $timeout = 0.20) {
     return $socket;
 }
 
+function CloseModbusTcp($socket) {
+    if ($socket) {
+        fclose($socket);
+    }
+}
+
 function readModbusRegisters($socket, $unitId, $startAddress, $quantity) 
 {
     if (!$socket) return "1";
@@ -46,6 +52,36 @@ function readModbusRegisters($socket, $unitId, $startAddress, $quantity)
         $registers[] = unpack('n', substr($payload, 2 + $i * 2, 2))[1];
     }
     return $registers;
+}
+
+function writeModbusCoil($socket, $unitId, $coilAddress, $value)
+{
+    if (!$socket) return "1";
+    $transactionId = rand(0, 0xFFFF);
+    $protocolId = 0x0000;
+    $length = 6;
+    $functionCode = 0x05;
+
+    // La valeur doit être 0xFF00 pour ON, 0x0000 pour OFF
+    $coilValue = ($value) ? 0xFF00 : 0x0000;
+
+    $adu = pack('nnnC', $transactionId, $protocolId, $length, $unitId);
+    $adu .= pack('Cnn', $functionCode, $coilAddress, $coilValue);
+
+    fwrite($socket, $adu);
+
+    $response = fread($socket, 12);
+    if (strlen($response) < 12) {
+        throw new Exception("Réponse Modbus TCP incomplète reçue (écriture coil)");
+    }
+
+    // Vérification de la réponse (optionnel)
+    $resp = unpack('ntransactionId/nprotocolId/nlength/CunitId/CfunctionCode/ncoilAddress/ncoilValue', $response);
+    if ($resp['functionCode'] != $functionCode) {
+        throw new Exception("Exception Modbus ou code fonction inattendu (écriture coil)");
+    }
+
+    return true;
 }
 
 // Fonction pour écrire dans un registre Modbus (fonction 0x06 Write Single Register)

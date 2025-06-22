@@ -263,7 +263,6 @@ function ClimTest(IdSel)
 function ClimGroupe()
 {
     OverScreenWunites.style.display = "block";
-    console.log("Groupe ID:", NumeroDeGroupeValide);
     OSWunite.src = "Wunites.php?Groupe=" + NumeroDeGroupeValide;
 
 }
