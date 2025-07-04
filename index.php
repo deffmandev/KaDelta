@@ -12,14 +12,44 @@
 
 <div class="FrameTitre">
 
-<img src="Images/LogoKaDelta.png" alt="Ka Delta Logo" style="width: 132px; height: auto;">
+<img src="Images/LogoKaDelta.png" alt="Ka Delta Logo" style="height: 172px;">
 <h1>Ka Delta Modbus</h1>
 
 <div class="TitreGroupe">
   <button id="btn-groupe" class="groupe-btn">Groupe</button>
   <button onclick="ClimGroupe()" class="groupe-btn">Action sur<br>groupe</button>
   <button id="fullscreen-btn" class="groupe-btn">Plein écran</button>
+  <button id="" class="groupe-btn">Programmation</button>
+  <button onclick="MaintenanceWindows()" id="" class="groupe-btn">Maintenance</button>
 </div>
+
+
+<!-- Affichage la Date et l'heures -->
+<div class="horloges">
+  <span id="date"></span><br>
+  <span id="heure" style="font-variant-numeric: tabular-nums;"><span id="h"></span><span id="colon" style="transition:0.4s;opacity: 0;">:</span><span id="m"></span></span>
+</div>
+<script>
+function updateDateHeure() {
+  const now = new Date();
+  const options = { weekday: 'long', year: 'numeric', month: 'numeric', day: 'numeric' };
+  const dateStr = now.toLocaleDateString('fr-FR', options);
+
+  // Sépare les heures et minutes, le clignotement ne déplace pas les chiffres
+  const minutes = now.getMinutes().toString().padStart(2, '0');
+  const heures = now.getHours().toString().padStart(2, '0');
+  const showColon = now.getSeconds() % 2 === 0 ? '1' : '0'; // espace insécable
+  document.getElementById('date').textContent = dateStr;
+  document.getElementById('h').textContent = heures;
+  document.getElementById('colon').style.opacity = showColon === '1' ? '1' : '0';
+  document.getElementById('m').textContent = minutes;
+}
+updateDateHeure();
+setInterval(updateDateHeure, 1000);
+</script>
+
+
+
 <script>
 document.getElementById('fullscreen-btn').addEventListener('click', function() {
   if (!document.fullscreenElement) {
@@ -36,8 +66,6 @@ document.getElementById('fullscreen-btn').addEventListener('click', function() {
 
 </div>
 
-
-<hr>
 
 
 
@@ -121,28 +149,28 @@ while ($row=sqlnext($basegroupe))
 
 <!-- Fenêtre popup cachée par défaut -->
 <div id="popup-groupe" style="
-  display:none;
-  position:absolute;
+  display: none;
+  position: absolute;
   background: rgba(20, 40, 80, 0.98);
   border-radius: 18px;
-  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
-  padding: 28px 20px 24px 20px;
-  z-index:1000;
-  min-width:260px;
-  max-width:95vw;
+  box-shadow: rgba(31, 38, 135, 0.25) 0px 8px 24px 0px;
+  padding: 20px 20px 24px;
+  z-index: 1000;
+  min-width: 260px;
+  max-width: 90vw;
   backdrop-filter: blur(10px);
-  border: 1px solid rgba(255,255,255,0.18);
-">
-  <h4 style="margin-top:0; font-size:1.3em; color:#fff; text-align:center; letter-spacing:1px;">Sélectionnez un groupe</h4>
-  <div style="display:flex; flex-direction:column; gap:22px; margin-top:18px;">
-      <button class="groupe-item" data-numero="all" style="padding:22px; font-size:1.25em; border-radius:14px; border:none; background:linear-gradient(90deg,#3b82f6,#2563eb); color:#fff; font-weight:700; box-shadow:0 2px 8px #0002; transition:background 0.2s, transform 0.1s; letter-spacing:1px;">
-        Toutes les unités
-      </button>
-      <?php foreach($groupes as $GroupeLoad): ?>
-      <button class="groupe-item" data-numero="<?= htmlspecialchars($GroupeLoad["Id"]) ?>" style="padding:22px; font-size:1.25em; border-radius:14px; border:none; background:linear-gradient(90deg,#3b82f6,#2563eb); color:#fff; font-weight:700; box-shadow:0 2px 8px #0002; transition:background 0.2s, transform 0.1s; letter-spacing:1px;">
-        <?= htmlspecialchars($GroupeLoad["Groupe"]) ?>
-      </button>
-    <?php endforeach; ?>
+  border: 1.5px solid rgba(255, 255, 255, 0.18);
+  ">
+  <h4 style="margin-top:0; font-size:1.15em; color:#fff; text-align:center; letter-spacing:1px;">Sélectionnez un groupe</h4>
+  <div style="display:flex; flex-direction:column; gap:18px; margin-top:16px;">
+    <button class="groupe-item" data-numero="all" style="padding:20px; font-size:1.15em; border-radius:14px; border:none; background:linear-gradient(90deg,#3b82f6,#2563eb); color:#fff; font-weight:700; box-shadow:0 2px 8px #0002; transition:background 0.2s, transform 0.1s; letter-spacing:1px;">
+    Toutes les unités
+    </button>
+    <?php foreach($groupes as $GroupeLoad): ?>
+    <button class="groupe-item" data-numero="<?= htmlspecialchars($GroupeLoad["Id"]) ?>" style="padding:20px; font-size:1.15em; border-radius:14px; border:none; background:linear-gradient(90deg,#3b82f6,#2563eb); color:#fff; font-weight:700; box-shadow:0 2px 8px #0002; transition:background 0.2s, transform 0.1s; letter-spacing:1px;">
+    <?= htmlspecialchars($GroupeLoad["Groupe"]) ?>
+    </button>
+  <?php endforeach; ?>
   </div>
 </div>
 
@@ -267,6 +295,12 @@ function ClimGroupe()
 
 }
 
+function MaintenanceWindows()
+{
+    OverScreenWunites.style.display = "block";
+    OSWunite.src = "Maintenance.php";
+}
+
 
 async function LoadDatas()
 {
@@ -329,7 +363,7 @@ function UpLoadData() {
     });
 }
 
-setInterval(() => {fetch('Srv.php'); }, 1000);
+//setInterval(() => {fetch('Srv.php'); }, 1000);
 
 UpLoadData();
 setInterval(UpLoadData,500);

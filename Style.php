@@ -3,6 +3,8 @@ body
 {
         background: #2f363c;
         color: white;
+        padding-top: 190px; /* Ajustez selon la hauteur de votre FrameTitre */
+
 }
 
 .Vignette
@@ -118,13 +120,22 @@ body
 .FrameTitre
 {
     display: flex;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    box-shadow: 1px 1px red;
+    height: 196px;
+    z-index: 100;
+    background: #2f363c;
+    box-shadow: 4px 6px 5px #0000007d;
 }
 
 .TitreGroupe
 {
-     position: absolute;
-    top: 78px;
-    left: 159px;
+    position: absolute;
+    top: 95px;
+    left: 173px;
     display: flex;
     flex-direction: row;
     align-content: center;
@@ -134,19 +145,19 @@ body
 
 .groupe-btn 
 {
-    background: linear-gradient(90deg, #6a11cb 0%, #2575fc 100%);
+    background: linear-gradient(79deg, #6a11cb 0%, #2575fc 100%);
     color: #fff;
     padding: 16px 36px;
     border: none;
     border-radius: 20px;
-    font-size: 1.2rem;
+    font-size: 1.0rem;
     font-weight: bold;
     box-shadow: 2px 3px 20px rgba(38, 50, 56, 0.2);
     cursor: pointer;
     transition: transform 0.15s, box-shadow 0.15s;
     outline: none;
     letter-spacing: 1px;
-    margin-right: 3em;
+    margin-right: 2em;
 }
 .groupe-btn:hover, .groupe-btn:hover 
         {
@@ -154,5 +165,20 @@ body
             box-shadow: 0 8px 32px rgba(38, 50, 56, 0.25);
             background: linear-gradient(90deg, #2575fc 0%, #6a11cb 100%);
         }
+
+.horloges
+{
+    position: absolute;
+    top: 19px;
+    right: 32px;
+    font-size: 1.4em;
+    padding: 6px;
+    font-family: math;
+    letter-spacing: 1px;
+    color: #fff;
+    font-weight: 400;
+    text-align: center;
+    z-index: 100;
+}
 
 </style>

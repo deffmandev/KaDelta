@@ -92,7 +92,14 @@ catch (Exception $e) {
 }
 
 
-        GetTable("ValUnites");
+       // GetTable("ValUnites");
+
+    echo strftime("Dernière mise à jour : %A %d %B %Y %H:%M:%S", time());
+   
+if (!empty($_GET["Commande"])) 
+{
+    echo $_GET["Commande"];
+}
 
 
 ?>
