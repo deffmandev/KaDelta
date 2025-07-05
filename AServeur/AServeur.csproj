@@ -6,4 +6,9 @@
     <UseWindowsForms>true</UseWindowsForms>
   </PropertyGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="App.ico" />
+    <EmbeddedResource Include="LogoKaDelta.png" />
+  </ItemGroup>
+
 </Project>
