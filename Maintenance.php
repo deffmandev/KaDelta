@@ -96,9 +96,8 @@
         <h2 style="margin-bottom:30px;">Menu Maintenance</h2>
         <div class="modal-menu">
             <button onclick="">Interface Lennox 109</button>
-            <button onclick="alert('Ajouter une unité')">Ajouter une unité</button>
-            <button onclick="alert('Ajouter un groupe')">Ajouter un groupe</button>
-            <button onclick="alert('Ajouter un groupe')">Controleurs</button>
+            <button onclick="openModbusIframe()">Gestion ModBus</button>
+            <button onclick="openGroupeIframe()">Gestion Groupe</button>
         </div>
     </div>
 </div>
@@ -136,6 +135,20 @@
     "></iframe>
     </div>
 </div>
+
+<!-- Modal pour l'iframe GtModbus.php (plein écran) -->
+<div class="modal-bg" id="modbus-iframe-bg" style="z-index:10001; display:none; background:rgba(0,0,0,0.35);">
+    <div class="modal" id="modbus-iframe-modal" style="width:100vw;height:100vh;max-width:100vw;max-height:100vh;padding:0;border-radius:0;overflow:hidden;background:transparent;box-shadow:none;">
+        <iframe src="" style="width:100vw;height:100vh;border:none;display:block;position:absolute;top:0;left:0;background:transparent;"></iframe>
+    </div>
+</div>
+<!-- Modal pour l'iframe Gtgroupe.php (plein écran) -->
+<div class="modal-bg" id="groupe-iframe-bg" style="z-index:10002; display:none; background:rgba(0,0,0,0.35);">
+    <div class="modal" id="groupe-iframe-modal" style="width:100vw;height:100vh;max-width:100vw;max-height:100vh;padding:0;border-radius:0;overflow:hidden;background:transparent;box-shadow:none;">
+        <iframe src="" style="width:100vw;height:100vh;border:none;display:block;position:absolute;top:0;left:0;background:transparent;"></iframe>
+    </div>
+</div>
+
 <script>
     // Ouvre la modale iframe quand on clique sur "Interface Lennox 109"
     document.querySelectorAll('.modal-menu button')[0].onclick = function() {
@@ -152,8 +165,31 @@
             document.getElementById('iframe-modal-bg').style.display = 'none';
         }, 200);
     };
-</script>
-<script>
+
+    // Ouvre la modale iframe en plein écran pour Gestion Modbus
+    function openModbusIframe() {
+        var modbusBg = document.getElementById('modbus-iframe-bg');
+        var modbusModal = document.getElementById('modbus-iframe-modal');
+        modbusBg.style.display = 'flex';
+        setTimeout(() => {
+            modbusBg.classList.add('visible');
+            modbusModal.querySelector('iframe').src = 'GtModbus.php';
+        }, 5);
+    }
+
+    // Ouvre la modale iframe en plein écran pour Gestion Groupe
+    function openGroupeIframe() {
+        var groupeBg = document.getElementById('groupe-iframe-bg');
+        var groupeModal = document.getElementById('groupe-iframe-modal');
+        groupeBg.style.display = 'flex';
+        setTimeout(() => {
+            groupeBg.classList.add('visible');
+            groupeModal.querySelector('iframe').src = 'Gtgroupe.php';
+        }, 5);
+    }
+    // Ferme la modale iframe Gestion Groupe depuis l'intérieur de Gtgroupe.php
+    // (déjà géré par le script de Gtgroupe.php via window.parent)
+
     // Animation ouverture
     const modalBg = document.getElementById('modal-bg');
     window.addEventListener('DOMContentLoaded', () => {

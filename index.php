@@ -156,22 +156,13 @@ while ($row=sqlnext($basegroupe))
   box-shadow: rgba(31, 38, 135, 0.25) 0px 8px 24px 0px;
   padding: 20px 20px 24px;
   z-index: 1000;
-  min-width: 260px;
+  min-width: 700px;
   max-width: 90vw;
   backdrop-filter: blur(10px);
   border: 1.5px solid rgba(255, 255, 255, 0.18);
   ">
   <h4 style="margin-top:0; font-size:1.15em; color:#fff; text-align:center; letter-spacing:1px;">Sélectionnez un groupe</h4>
-  <div style="display:flex; flex-direction:column; gap:18px; margin-top:16px;">
-    <button class="groupe-item" data-numero="all" style="padding:20px; font-size:1.15em; border-radius:14px; border:none; background:linear-gradient(90deg,#3b82f6,#2563eb); color:#fff; font-weight:700; box-shadow:0 2px 8px #0002; transition:background 0.2s, transform 0.1s; letter-spacing:1px;">
-    Toutes les unités
-    </button>
-    <?php foreach($groupes as $GroupeLoad): ?>
-    <button class="groupe-item" data-numero="<?= htmlspecialchars($GroupeLoad["Id"]) ?>" style="padding:20px; font-size:1.15em; border-radius:14px; border:none; background:linear-gradient(90deg,#3b82f6,#2563eb); color:#fff; font-weight:700; box-shadow:0 2px 8px #0002; transition:background 0.2s, transform 0.1s; letter-spacing:1px;">
-    <?= htmlspecialchars($GroupeLoad["Groupe"]) ?>
-    </button>
-  <?php endforeach; ?>
-  </div>
+  <div id="groupe-list" style="display:flex; flex-direction:column; gap:18px; margin-top:16px;"></div>
 </div>
 
 <script>
@@ -279,6 +270,107 @@ document.querySelectorAll('.groupe-item').forEach(function(item) {
 </script>
 
 <script>
+window.groupesData = [
+  { id: 'all', label: 'Toutes les unités' },
+  ...<?php echo json_encode(array_map(function($g){return ["id"=>$g["Id"],"label"=>$g["Groupe"]];}, $groupes)); ?>
+];
+const groupeListDiv = document.getElementById('groupe-list');
+function renderGroupeButtons() {
+  groupeListDiv.innerHTML = '';
+  let groupes = window.groupesData;
+  if (groupes.length > 24) {
+    // 3 colonnes
+    popup.style.minWidth = '700px';
+    popup.style.width = '';
+    groupeListDiv.style.flexDirection = 'row';
+    groupeListDiv.style.flexWrap = 'wrap';
+    groupeListDiv.style.gap = '18px';
+    groupeListDiv.style.justifyContent = 'center';
+    let col1 = document.createElement('div');
+    let col2 = document.createElement('div');
+    let col3 = document.createElement('div');
+    [col1, col2, col3].forEach(col => {
+      col.style.display = 'flex';
+      col.style.flexDirection = 'column';
+      col.style.gap = '18px';
+      col.style.width = '320px';
+    });
+    let third = Math.ceil(groupes.length/3);
+    groupes.forEach((g,i)=>{
+      let btn = document.createElement('button');
+      btn.className = 'groupe-item';
+      btn.setAttribute('data-numero', g.id);
+      btn.style = 'width:100%; box-sizing:border-box; padding:20px; font-size:1.15em; border-radius:14px; border:none; background:linear-gradient(90deg,#3b82f6,#2563eb); color:#fff; font-weight:700; box-shadow:0 2px 8px #0002; transition:background 0.2s, transform 0.1s; letter-spacing:1px;';
+      btn.textContent = g.label;
+      if (i < third) col1.appendChild(btn);
+      else if (i < 2*third) col2.appendChild(btn);
+      else col3.appendChild(btn);
+    });
+    groupeListDiv.appendChild(col1);
+    groupeListDiv.appendChild(col2);
+    groupeListDiv.appendChild(col3);
+  } else if (groupes.length > 12) {
+    // 2 colonnes
+    popup.style.minWidth = '700px';
+    popup.style.width = '';
+    groupeListDiv.style.flexDirection = 'row';
+    groupeListDiv.style.flexWrap = 'wrap';
+    groupeListDiv.style.gap = '18px';
+    groupeListDiv.style.justifyContent = 'center';
+    let col1 = document.createElement('div');
+    let col2 = document.createElement('div');
+    col1.style.display = col2.style.display = 'flex';
+    col1.style.flexDirection = col2.style.flexDirection = 'column';
+    col1.style.gap = col2.style.gap = '18px';
+    col1.style.width = col2.style.width = '320px';
+    let half = Math.ceil(groupes.length/2);
+    groupes.forEach((g,i)=>{
+      let btn = document.createElement('button');
+      btn.className = 'groupe-item';
+      btn.setAttribute('data-numero', g.id);
+      btn.style = 'width:100%; box-sizing:border-box; padding:20px; font-size:1.15em; border-radius:14px; border:none; background:linear-gradient(90deg,#3b82f6,#2563eb); color:#fff; font-weight:700; box-shadow:0 2px 8px #0002; transition:background 0.2s, transform 0.1s; letter-spacing:1px;';
+      btn.textContent = g.label;
+      (i<half?col1:col2).appendChild(btn);
+    });
+    groupeListDiv.appendChild(col1);
+    groupeListDiv.appendChild(col2);
+  } else {
+    // 1 colonne
+    popup.style.minWidth = '';
+    popup.style.width = '320px';
+    groupeListDiv.style.flexDirection = 'column';
+    groupeListDiv.style.flexWrap = 'nowrap';
+    groupes.forEach(g=>{
+      let btn = document.createElement('button');
+      btn.className = 'groupe-item';
+      btn.setAttribute('data-numero', g.id);
+      btn.style = 'width:320px; box-sizing:border-box; padding:20px; font-size:1.15em; border-radius:14px; border:none; background:linear-gradient(90deg,#3b82f6,#2563eb); color:#fff; font-weight:700; box-shadow:0 2px 8px #0002; transition:background 0.2s, transform 0.1s; letter-spacing:1px;';
+      btn.textContent = g.label;
+      groupeListDiv.appendChild(btn);
+    });
+  }
+}
+renderGroupeButtons();
+</script>
+
+<script>
+// Remplacer tous les querySelectorAll('.groupe-item') par une délégation d'événement :
+groupeListDiv.addEventListener('click', function(e) {
+  if (e.target.classList.contains('groupe-item')) {
+    popup.style.display = 'none';
+    overlay.style.display = 'none';
+    const numero = e.target.getAttribute('data-numero');
+    NumeroDeGroupeValide= numero;
+    if (numero === 'all') {
+      filtrerParGroupeNumero('all');
+    } else {
+      filtrerParGroupeNumero(numero);
+    }
+  }
+});
+</script>
+
+<script>
 
 function ClimTest(IdSel)
 {
@@ -370,5 +462,56 @@ setInterval(UpLoadData,500);
 
 
 
+</script>
+
+<script>
+// Rafraîchit dynamiquement la liste des groupes (popup) après modification dans Gtgroupe.php
+window.reloadGroupes = async function() {
+  try {
+    const response = await fetch('DatasUnites.php?groupes=1');
+    if (!response.ok) return;
+    const data = await response.json();
+    if (Array.isArray(data.groupes)) {
+      window.groupesData = [
+        { id: 'all', label: 'Toutes les unités' },
+        ...data.groupes.map(g => ({ id: g.Id, label: g.Groupe }))
+      ];
+      renderGroupeButtons();
+    }
+  } catch (e) { /* ignore */ }
+}
+
+// Détecte si une modale quelconque est ouverte (OverScreen, overlay-groupe, popup-groupe)
+function isAnyModalOpen() {
+  // Vérifie la présence d'une modale visible
+  const overScreen = document.getElementById('OverScreenWunites');
+  const overlayGroupe = document.getElementById('overlay-groupe');
+  const popupGroupe = document.getElementById('popup-groupe');
+  // Ajoutez ici d'autres modales si besoin
+  return (
+    (overScreen && overScreen.style.display !== 'none' && overScreen.style.display !== '') ||
+    (overlayGroupe && overlayGroupe.style.display !== 'none' && overlayGroupe.style.display !== '') ||
+    (popupGroupe && popupGroupe.style.display !== 'none' && popupGroupe.style.display !== '')
+  );
+}
+
+window.groupeEditionActive = false;
+let lastGroupesHash = null;
+async function checkGroupesChange() {
+  if (window.groupeEditionActive || isAnyModalOpen()) return;
+  try {
+    const response = await fetch('DatasUnites.php?groupes=1');
+    if (!response.ok) return;
+    const data = await response.json();
+    if (Array.isArray(data.groupes)) {
+      const hash = data.groupes.length + ':' + data.groupes.map(g => g.Id + '-' + g.Groupe).join('|');
+      if (lastGroupesHash !== null && hash !== lastGroupesHash) {
+        location.reload();
+      }
+      lastGroupesHash = hash;
+    }
+  } catch (e) { /* ignore */ }
+}
+setInterval(checkGroupesChange, 600);
 </script>
 

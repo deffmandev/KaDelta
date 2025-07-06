@@ -94,6 +94,8 @@ catch (Exception $e) {
 
        // GetTable("ValUnites");
 
+    // Définir la locale française pour l'affichage des dates
+    setlocale(LC_TIME, 'fr_FR.UTF-8', 'fr_FR', 'french');
     echo strftime("Dernière mise à jour : %A %d %B %Y %H:%M:%S", time());
    
 if (!empty($_GET["Commande"])) 
