@@ -6,9 +6,6 @@
     <title>Ka Delta</title>
 </head>
 <body>
-    
-</body>
-</html>
 
 <div class="FrameTitre">
 
@@ -19,8 +16,8 @@
   <button id="btn-groupe" class="groupe-btn">Groupe</button>
   <button onclick="ClimGroupe()" class="groupe-btn">Action sur<br>groupe</button>
   <button id="fullscreen-btn" class="groupe-btn">Plein écran</button>
-  <button id="" class="groupe-btn">Programmation</button>
-  <button onclick="MaintenanceWindows()" id="" class="groupe-btn">Maintenance</button>
+  <button id="btn-programmation" class="groupe-btn">Programmation</button>
+  <button onclick="MaintenanceWindows()" class="groupe-btn">Maintenance</button>
 </div>
 
 
@@ -514,4 +511,14 @@ async function checkGroupesChange() {
 }
 setInterval(checkGroupesChange, 600);
 </script>
+<script>
+// Ajout ouverture Programme.php en plein écran via overlay
+function openProgrammation() {
+  document.getElementById('OverScreenWunites').style.display = "block";
+  document.getElementById('OSWunite').src = "Programme.php";
+}
+document.getElementById('btn-programmation').onclick = openProgrammation;
+</script>
+</body>
+</html>
 
