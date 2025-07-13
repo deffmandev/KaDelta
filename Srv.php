@@ -94,8 +94,6 @@ catch (Exception $e) {
 
        // GetTable("ValUnites");
 
-    // Définir la locale française pour l'affichage des dates
-    setlocale(LC_TIME, 'fr_FR.UTF-8', 'fr_FR', 'french');
     echo strftime("Dernière mise à jour : %A %d %B %Y %H:%M:%S", time());
    
 if (!empty($_GET["Commande"])) 
@@ -103,5 +101,18 @@ if (!empty($_GET["Commande"]))
     echo $_GET["Commande"];
 }
 
+// Appel automatique à SrvProg.php toutes les minutes (via variable/fichier local)
+$lastSrvProgFile = __DIR__ . '/last_srvprog.txt';
+$now = time();
+$lastCall = 0;
+if (file_exists($lastSrvProgFile)) {
+    $lastCall = (int)file_get_contents($lastSrvProgFile);
+}
+if ($now - $lastCall >= 60) {
+    // Appel SrvProg.php
+    $srvprog_result = @file_get_contents('http://localhost/SrvProg.php');
+    file_put_contents($lastSrvProgFile, $now);
+    echo htmlspecialchars($srvprog_result);
+}
 
 ?>
