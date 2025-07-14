@@ -98,11 +98,17 @@
             <button onclick="">Interface Lennox 109</button>
             <button onclick="openModbusIframe()">Gestion ModBus</button>
             <button onclick="openGroupeIframe()">Gestion Groupe</button>
+            <button onclick="openAjouteUniteLgIframe()">Ajoute Unité LG</button>
         </div>
     </div>
 </div>
 
-<!-- Modal pour l'iframe proxy 109.php -->
+<!-- Modal pour l'iframe AjouteUniteLg.php -->
+<div class="modal-bg" id="ajoute-lg-iframe-bg" style="z-index:10003; display:none; background:rgba(0,0,0,0.35);">
+    <div class="modal" id="ajoute-lg-iframe-modal" style="width:100vw;height:100vh;max-width:100vw;max-height:100vh;padding:0;border-radius:0;overflow:hidden;background:transparent;box-shadow:none;">
+        <iframe src="" style="width:100vw;height:100vh;border:none;display:block;position:absolute;top:0;left:0;background:transparent;"></iframe>
+    </div>
+</div>
 <div class="modal-bg" id="iframe-modal-bg" style="z-index:10000; display:none;">
     <div class="modal" id="iframe-modal" style="height: 724px;width: 853px;padding: 36px;overflow: hidden;">
         <button class="close-btn" id="close-iframe-btn" title="Fermer" style="top:18px; right:18px; background:transparent; border:none; padding:0; cursor:pointer;">
@@ -150,6 +156,17 @@
 </div>
 
 <script>
+    // Ouvre la modale iframe pour AjouteUniteLg.php
+    function openAjouteUniteLgIframe() {
+        var ajouteBg = document.getElementById('ajoute-lg-iframe-bg');
+        var ajouteModal = document.getElementById('ajoute-lg-iframe-modal');
+        ajouteBg.style.display = 'flex';
+        setTimeout(() => {
+            ajouteBg.classList.add('visible');
+            ajouteModal.querySelector('iframe').src = 'AjouteUniteLg.php';
+        }, 5);
+    }
+    // Plus de croix rouge pour fermer la modale AjouteUniteLg.php
     // Ouvre la modale iframe quand on clique sur "Interface Lennox 109"
     document.querySelectorAll('.modal-menu button')[0].onclick = function() {
         document.getElementById('iframe-modal-bg').style.display = 'flex';
