@@ -1,11 +1,13 @@
 <?php
 
-function connectModbusTcp($ip, $port = 502, $timeout = 0.20) {
+function connectModbusTcp($ip, $port = 502, $timeout = 0.20) 
+{
     $socket = @fsockopen($ip, $port, $errno, $errstr, $timeout);
     return $socket;
 }
 
-function CloseModbusTcp($socket) {
+function CloseModbusTcp($socket) 
+{
     if ($socket) {
         fclose($socket);
     }
@@ -85,7 +87,8 @@ function writeModbusCoil($socket, $unitId, $coilAddress, $value)
 }
 
 // Fonction pour écrire dans un registre Modbus (fonction 0x06 Write Single Register)
-function writeModbusRegister($socket, $unitId, $registerAddress, $value) {
+function writeModbusRegister($socket, $unitId, $registerAddress, $value) 
+{
     if (!$socket) return "1";
     // Génère un identifiant de transaction aléatoire
     $transactionId = rand(0, 0xFFFF);
@@ -159,67 +162,55 @@ function readModbusCoil($socket, $unitId, $startAddress, $quantity = 1)
     return $coils;
 }
 
-// Exemple d'utilisation :
-/*
- * Fonctions Modbus TCP en PHP
- * connectModbusTcp     : se connecte à un serveur Modbus TCP
- * readModbusRegisters  : lit des registres Modbus
- * writeModbusRegister  : écrit dans un registre Modbus
-try {
-    $ip = '192.168.1.19'; // Adresse IP de l'automate Modbus
-    $port = 502; // Port Modbus TCP par défaut
-    $unitId = 1; // Identifiant de l'unité Modbus
-    $startAddress = 0; // Adresse de départ des registres
-    $quantity = 30; // Nombre de registres à lire
 
-    $socket = connectModbusTcp($ip, $port);
-    $registers = readModbusRegisters($socket, $unitId, $startAddress, $quantity);
-        writeModbusRegister($socket, $unitId, 11, 60);
+function ModbusWrite($socket,$Unite,$StartAddress,$type,$valeur)
+{
+                                if ($valeur === null || $valeur === '') return;
 
-    fclose($socket);
+                                if ($type=='1') {
+                                    try {
+                                        writeModbusCoil($socket, $Unite, $StartAddress, $valeur);
+                                        }
+                                    catch (Exception $e) 
+                                        {
+                                    echo "Erreur lors de l'écriture de la bobine Modbus : " . $e->getMessage();
+                                    return;
+                                        }
+                                            }
 
-    //convertie les donnees en signed
-    foreach ($registers as &$reg) 
-        if ($reg >= 0x8000) $reg -= 0x10000;
-    unset($reg);
-    
-    echo "Valeurs lues : " . implode(', ', $registers);
-} catch (Exception $e) {
-    echo "Erreur : " . $e->getMessage();
+                                if ($type=='3') {
+                                    try {
+                                        writeModbusRegister($socket, $Unite, $StartAddress, $valeur);
+                                        }
+                                    catch (Exception $e) {
+                                    echo "Erreur lors de l'écriture du registre Modbus : " . $e->getMessage();
+                                    return;
+                                        }
+                                
+                                if ($type>299)
+                                        {
+                                            $Bit = $type - 300; // Calculer le bit à partir du type
+                                            $Valeur=readModbusRegisters($socket, $Unite, $StartAddress, 1)[0]; // Lire la valeur actuelle du registre
+
+                                            if ($valeur) 
+                                                $NewValeur = $Valeur | (1 << $Bit);
+                                            else 
+                                                $NewValeur = $Valeur & ~(1 << $Bit);
+
+                                            
+                                            try {
+                                                writeModbusRegister($socket, $Unite, $StartAddress, $NewValeur);
+                                                }
+                                                catch (Exception $e) {
+                                                    echo "Erreur lors de l'écriture du registre Modbus : " . $e->getMessage();
+                                                return;
+                                            }
+                                        }
+                                                                    
+                                        } 
+
+
 }
-
-try {
-    $ip = '192.168.1.109';
-    $port = 8234;
-    $unitId = 1;
-    $registerAddress = 11;
-    $value = 50; // Remplacez par la valeur à écrire
-
-    $socket = connectModbusTcp($ip, $port);
-    writeModbusRegister($socket, $unitId, $registerAddress, $value);
-    fclose($socket);
-
-    echo "<br>Valeur $value écrite dans le registre $registerAddress.";
-} catch (Exception $e) {
-    echo "<br>Erreur écriture : " . $e->getMessage();
-}
-
-
-
-
-// Exemple d'utilisation :
-$valeur = $registers[0];
-$ValBit=to16BitBinary($valeur);
-echo "<br>Valeur $valeur en binaire 16 bits : " . $ValBit;
-
-if ($ValBit[16-2] === '1') {
-    echo "<br>Le bit 2 de \$ValBit est à 1.";
-} else {
-    echo "<br>Le bit 2 de \$ValBit est a 0.";
-}
-
-
- */
 
 
  

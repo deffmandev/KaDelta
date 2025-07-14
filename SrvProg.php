@@ -82,57 +82,6 @@ foreach ($phoraires as $horaire)
 }
 
 
-function ModbusWrite($socket,$Unite,$StartAddress,$type,$valeur)
-{
-                                if ($valeur === null || $valeur === '') return;
-
-                                if ($type=='1') {
-                                    try {
-                                        writeModbusCoil($socket, $Unite, $StartAddress, $valeur);
-                                        }
-                                    catch (Exception $e) 
-                                        {
-                                    echo "Erreur lors de l'écriture de la bobine Modbus : " . $e->getMessage();
-                                    return;
-                                        }
-                                            }
-
-                                if ($type=='3') {
-                                    try {
-                                        writeModbusRegister($socket, $Unite, $StartAddress, $valeur);
-                                        }
-                                    catch (Exception $e) {
-                                    echo "Erreur lors de l'écriture du registre Modbus : " . $e->getMessage();
-                                    return;
-                                        }
-                                
-                                if ($type>299)
-                                        {
-                                            $Bit = $type - 300; // Calculer le bit à partir du type
-                                            $Valeur=readModbusRegisters($socket, $Unite, $StartAddress, 1)[0]; // Lire la valeur actuelle du registre
-                                            $ValBit=to16BitBinary($valeur);
-
-                                            if ($valeur) 
-                                                $NewValeur = $Valeur | (1 << $Bit);
-                                            else 
-                                                $NewValeur = $Valeur & ~(1 << $Bit);
-
-                                            $ValBit=to16BitBinary($NewValeur);
-
-                                            
-                                            try {
-                                                writeModbusRegister($socket, $Unite, $Adddr, $StartAddress, $NewValeur);
-                                                }
-                                                catch (Exception $e) {
-                                                    echo "Erreur lors de l'écriture du registre Modbus : " . $e->getMessage();
-                                                return;
-                                            }
-                                        }
-                                                                    
-                                        } 
-
-
-}
 
 
 

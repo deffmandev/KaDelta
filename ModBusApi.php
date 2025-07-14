@@ -17,10 +17,9 @@ function ModUnite($Id)
     global $Page_Type;
     global $Page_Idem;
     global $Page_Valeur;
-    global $Page_GroupeActif;
-    global $Page_IdUnite;
-
     global $modbusRows;
+
+    
     $BaseData=mssql("SELECT * FROM [dbo].[DefUnites] WHERE Id = $Id");
     $row=sqlnext($BaseData);
 
@@ -33,55 +32,15 @@ function ModUnite($Id)
     $valeur = $Page_Valeur;
     $DeviceId = $row["Device"];
 
+
+
     $Modbus=connectModbusTcp($ip, $port);
     if (!$Modbus) {
         echo "Erreur de connexion au Modbus à l'adresse $ip:$port";
         return;
     }
 
-    if ($Type=='3') {
-        try {
-            writeModbusRegister($Modbus, $DeviceId, $Adddr, $valeur);
-            }
-            catch (Exception $e) {
-                echo "Erreur lors de l'écriture du registre Modbus : " . $e->getMessage();
-            return;
-        }
-    } 
-
-    if ($Type=='1') {
-        try {
-            writeModbusCoil($Modbus, $DeviceId, $Adddr, $valeur);
-            }
-            catch (Exception $e) {
-                echo "Erreur lors de l'écriture de la bobine Modbus : " . $e->getMessage();
-            return;
-        }
-    }
-    if ($Type>299)
-    {
-        $Bit = $Type - 300; // Calculer le bit à partir du type
-        $Valeur=readModbusRegisters($Modbus, $DeviceId, $Adddr, 1)[0]; // Lire la valeur actuelle du registre
-        $ValBit=to16BitBinary($valeur);
-
-        // Met à jour le bit $Bit de $Valeur avec la valeur $valeur (0 ou 1)
-        if ($valeur) {
-            $NewValeur = $Valeur | (1 << $Bit);
-        } else {
-            $NewValeur = $Valeur & ~(1 << $Bit);
-        }
-
-        $ValBit=to16BitBinary($NewValeur);
-
-        
-        try {
-            writeModbusRegister($Modbus, $DeviceId, $Adddr, $NewValeur);
-            }
-            catch (Exception $e) {
-                echo "Erreur lors de l'écriture du registre Modbus : " . $e->getMessage();
-            return;
-        }
-    }
+    ModbusWrite($Modbus,$DeviceId,$Adddr,$Type,$valeur);
 
     if ($Modbus) CloseModbusTcp($Modbus);
 }
