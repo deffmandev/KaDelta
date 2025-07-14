@@ -67,8 +67,31 @@ while ($row = sqlnext($resultUnite))
     $type= $row["Type_SetRoom"];$startAddress=$row["SetRoom"];
     $SetRoom=LireModbus($socket,$unitId,$startAddress,$type);
 
+            if ($Mode === 1) // Mode Climatisation
+        {
+            if ($SetRoom < $row["LimiteClimB"]) ModbusWrite($socket,$unitId,$startAddress,$type,$row["LimiteClimB"]);
+            if ($SetRoom > $row["LimiteClimH"]) ModbusWrite($socket,$unitId,$startAddress,$type,$row["LimiteClimH"]);
+        }
+            if ($Mode === 5) // Mode Chauffage
+        {
+            if ($SetRoom < $row["LimiteChaudB"]) ModbusWrite($socket,$unitId,$startAddress,$type,$row["LimiteChaudB"]);
+            if ($SetRoom > $row["LimiteChaudH"]) ModbusWrite($socket,$unitId,$startAddress,$type,$row["LimiteChaudH"]);
+        }
+
+            if ($Mode === 4) // Mode Automatique
+        {
+            $Minimum = min($row["LimiteChaudB"], $row["LimiteClimB"]);
+            $Maximum = max($row["LimiteChaudH"], $row["LimiteClimH"]);
+            
+            if ($SetRoom < $Minimum)  ModbusWrite($socket,$unitId,$startAddress,$type,$Minimum);
+            if ($SetRoom > $Maximum)  ModbusWrite($socket,$unitId,$startAddress,$type,$Maximum);
+        }
+
+
     $type= $row["Type_CodeErreur"];$startAddress=$row["CodeErreur"];
     $CodeErreur=LireModbus($socket,$unitId,$startAddress,$type);
+
+
 
     fclose($socket);
     }

@@ -17,6 +17,18 @@ if ($conn === false) {
     die(print_r(sqlsrv_errors(), true));
 }
 
+// Gestion d'erreur centralisée
+function logSqlError($context = '') {
+    $errors = sqlsrv_errors();
+    $msg = "[SQLSRV ERROR] ";
+    if ($context) $msg .= "($context) ";
+    foreach ($errors as $error) {
+        $msg .= "SQLSTATE: " . $error['SQLSTATE'] . ", Code: " . $error['code'] . ", Message: " . $error['message'] . "; ";
+    }
+    error_log($msg);
+    echo "<div style='color:red;font-weight:bold;'>Erreur base de données. Consultez les logs.</div>";
+}
+
 function GetTable($tableName)
 {
     global $conn;
@@ -24,7 +36,8 @@ function GetTable($tableName)
     $stmt = sqlsrv_query($conn, $sql);
 
     if ($stmt === false) {
-        die(print_r(sqlsrv_errors(), true));
+        logSqlError('GetTable');
+        return;
     }
 
     echo "<table border='1' cellpadding='5'><tr>";
@@ -53,11 +66,13 @@ function mssql($sql)
     try {
         $stmt = sqlsrv_query($conn, $sql);
         if ($stmt === false) {
-            throw new Exception(print_r(sqlsrv_errors(), true));
-        }   
+            logSqlError('mssql');
+            return false;
+        }
         return $stmt;
     } catch (Exception $e) {
-        echo "Error executing query: " . $e->getMessage();
+        error_log("[EXCEPTION] " . $e->getMessage());
+        echo "<div style='color:red;font-weight:bold;'>Erreur SQL. Consultez les logs.</div>";
         return false;
     }
 
@@ -69,13 +84,14 @@ function sqlnext($base)
 }
 
 function mssqlinfo()
-{   
+{
     global $conn;
     $sql = "SELECT @@VERSION AS Version";
     $stmt = sqlsrv_query($conn, $sql);
 
     if ($stmt === false) {
-        die(print_r(sqlsrv_errors(), true));
+        logSqlError('mssqlinfo');
+        return;
     }
 
     $row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC);
@@ -92,7 +108,8 @@ function afficherListeTables()
     $stmt = sqlsrv_query($conn, $sql);
 
     if ($stmt === false) {
-        die(print_r(sqlsrv_errors(), true));
+        logSqlError('afficherListeTables');
+        return;
     }
 
     echo "<ul>";
@@ -119,22 +136,38 @@ function updateTable($table, $field, $value, $whereField, $whereValue)
 {
     global $conn;
     if ($whereValue==-1)
-        {
+    {
         $sql = "UPDATE [$table] SET [$field] = ?";
         $params = [$value];
-        }
+    }
     else
-        {    
+    {
         $sql = "UPDATE [$table] SET [$field] = ? WHERE [$whereField] = ?";
         $params = [$value, $whereValue];
-        }
+    }
     $stmt = sqlsrv_query($conn, $sql, $params);
 
     if ($stmt === false) {
-        die(print_r(sqlsrv_errors(), true));
+        logSqlError('updateTable');
+        return false;
     }
     return true;
 }
+
+function mssql_insert($table, $data) 
+{
+    $fields = [];
+    $values = [];
+    foreach ($data as $key => $value) 
+        {
+                $fields[] = "[" . addslashes($key) . "]";
+                $values[] = "'" . addslashes($value) . "'";
+        }
+            $sql = "INSERT INTO [$table] (" . implode(',', $fields) . ") VALUES (" . implode(',', $values) . ")";
+            return mssql($sql);
+}
+
+
 
 if (isset($_GET['table'])) 
 {

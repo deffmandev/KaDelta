@@ -107,6 +107,22 @@ if ($resg) {
     box-shadow: 0 4px 16px #3498db44;
 }
 </style>
+
+        <?php
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            ?>
+            <script>
+                if(window.parent && window.parent.document)
+                    {
+                    var bg = window.parent.document.getElementById("ajoute-lg-iframe-bg");
+                    if(bg) setTimeout(function(){ bg.style.display = "none"; }, 1);
+                    }
+            </script>
+            <?php
+        }
+        ?>
+
+
 <?php if ($_SERVER['REQUEST_METHOD'] !== 'POST') : ?>
 <div id="modal-bg-lg">
   <div id="modal-lg">
@@ -137,25 +153,7 @@ if ($resg) {
     </form>
   </div>
 </div>
-<?php endif; ?>
 
-        <?php
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            ?>
-            <script>
-                if(window.parent && window.parent.document){
-                    var bg = window.parent.document.getElementById("ajoute-lg-iframe-bg");
-                    if(bg) {
-                        setTimeout(function(){ bg.style.display = "none"; }, 200);
-                    }
-                }
-            </script>
-            <?php
-        }
-        ?>
-
-
-<?php if ($_SERVER['REQUEST_METHOD'] !== 'POST') : ?>
 <script>
 document.getElementById('close-lg').onclick = function() {
     document.getElementById('modal-bg-lg').style.display = 'none';

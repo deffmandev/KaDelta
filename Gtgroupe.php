@@ -338,7 +338,7 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(r => r.text())
             .then(msg => {
                 // Rafraîchit dynamiquement la liste après ajout ou modification
-                if (msg === 'ajouté' || msg === 'modifié') {
+                if (msg.includes('ajouté') || msg.includes('modifié')) {
                     reloadGroupesTable();
                     closeModal('groupeModal');
                 }
@@ -372,7 +372,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Ferme seulement la modale de confirmation
                 closeModal('deleteConfirmModal');
                 // Rafraîchit dynamiquement la liste après suppression
-                if (msg === 'supprimé') reloadGroupesTable();
+                if (msg.includes('supprimé')) reloadGroupesTable();
             });
         }
     };
