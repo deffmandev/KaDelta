@@ -94,7 +94,7 @@ try {
     
 echo "<div class='CadreUnites'>";
 
-for ($Nbmax=1;$Nbmax<400;$Nbmax++)
+for ($Nbmax=1;$Nbmax<4000;$Nbmax++)
 {
     if (isset($names[$Nbmax])) 
 echo '
@@ -391,24 +391,63 @@ function MaintenanceWindows()
 }
 
 
-async function LoadDatas()
-{
+
+let loadDatasPending = false;
+async function LoadDatas() {
+    if (loadDatasPending) return null;
+    loadDatasPending = true;
     const url = 'DatasUnites.php';
+    let timeoutId;
     try {
-        const response = await fetch(url);
+        const controller = new AbortController();
+        timeoutId = setTimeout(() => controller.abort(), 3000);
+        const response = await fetch(url, { signal: controller.signal });
+        clearTimeout(timeoutId);
         if (!response.ok) {
             throw new Error('Erreur réseau');
         }
         const data = await response.json();
         return data;
     } catch (error) {
-        console.error('Erreur lors de la récupération des données :', error);
+        if (error.name === 'AbortError') {
+            console.error('Timeout de 3s dépassé pour LoadDatas');
+        } else {
+            console.error('Erreur lors de la récupération des données :', error);
+        }
         return null;
+    } finally {
+        loadDatasPending = false;
     }
 }
 
 
 function UpdateVignettes(data) {
+    // Si data contient une erreur, on arrête la fonction
+    if (data && typeof data === 'object' && 'error' in data) return;
+    
+
+    // Met à jour ou masque chaque vignette selon la présence dans data
+    const idsExistants = new Set(data.map(item => String(item.Id)));
+    document.querySelectorAll('.Vignette').forEach(v => {
+        const id = v.id.replace('Vig', '');
+        if (!idsExistants.has(id)) {
+            v.style.display = 'none';
+            // Efface le contenu des cases
+            let t1 = v.querySelector('.ViT1');
+            let t2 = v.querySelector('.ViT2');
+            let t3 = v.querySelector('.ViT3');
+            let t4 = v.querySelector('.ViT4');
+            let t5 = v.querySelector('.ViT5');
+            if (t1) t1.textContent = '';
+            if (t2) t2.textContent = '';
+            if (t3) t3.textContent = '';
+            if (t4) t4.textContent = '';
+            if (t5) t5.textContent = '';
+            v.setAttribute('data-groupe', '0');
+        } else {
+            v.style.display = 'block';
+        }
+    });
     data.forEach(item => {
         const vignette = document.getElementById("Vig" + item.Id);
         if (vignette) {
@@ -419,7 +458,6 @@ function UpdateVignettes(data) {
             vignette.querySelector('.ViT5').textContent = item.Gr;
             vignette.setAttribute('data-groupe', item.Gr);
             filtrerParGroupeNumero(NumeroDeGroupeValide);
-            
             // Mettez à jour la classe de la vignette en fonction de l'état
             if (item.OnOff === 1) {
                 vignette.className = "Vignette ViOnClim";
@@ -430,15 +468,12 @@ function UpdateVignettes(data) {
                 vignette.className = "Vignette ViOff";
             }
         }
-         if (item.Alarm === 1) {
-                    vignette.className = "Vignette ViOnDefaut";
-                    vignette.querySelector('.ViT2').textContent = "ALARM";
-                    vignette.querySelector('.ViT3').textContent = item.CodeErreur;
-                    vignette.querySelector('.ViT4').textContent = "";
-                    }
-
-        //vignette.style.display = "block";
-
+        if (item.Alarm === 1) {
+            vignette.className = "Vignette ViOnDefaut";
+            vignette.querySelector('.ViT2').textContent = "ALARM";
+            vignette.querySelector('.ViT3').textContent = item.CodeErreur;
+            vignette.querySelector('.ViT4').textContent = "";
+        }
     });
 }
 
@@ -452,10 +487,14 @@ function UpLoadData() {
     });
 }
 
-//setInterval(() => {fetch('Srv.php'); }, 1000);
-
-UpLoadData();
-setInterval(UpLoadData,500);
+// Boucle asynchrone pour attendre la réponse avant de relancer l'appel API
+async function loopUpLoadData() {
+    while (true) {
+        await UpLoadData();
+        await new Promise(resolve => setTimeout(resolve, 400)); // 1 seconde d'attente
+    }
+}
+loopUpLoadData();
 
 
 
@@ -509,7 +548,7 @@ async function checkGroupesChange() {
     }
   } catch (e) { /* ignore */ }
 }
-setInterval(checkGroupesChange, 600);
+setInterval(checkGroupesChange, 4000);
 </script>
 <script>
 // Ajout ouverture Programme.php en plein écran via overlay

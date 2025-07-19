@@ -180,5 +180,29 @@ if (isset($_GET['table']))
 }
 
 
+// Suppression via API GET
+if (isset($_GET['delete']) && $_GET['delete'] == '1' && isset($_GET['table']) && isset($_GET['Id'])) {
+    $table = $_GET['table'];
+    $id = $_GET['Id'];
+    // Par défaut, suppression sur le champ Id
+    $res = sql_delete($table, 'Id', $id);
+    if ($res) {
+        echo 'OK';
+    } else {
+        echo 'Erreur suppression';
+    }
+    exit;
+}
+// Suppression générique d'une ligne dans une table
+function sql_delete($table, $whereField, $whereValue) {
+    $table = preg_replace('/[^a-zA-Z0-9_]/', '', $table); // Sécurité basique
+    $whereField = preg_replace('/[^a-zA-Z0-9_]/', '', $whereField);
+    $whereValue = addslashes($whereValue);
+    $sql = "DELETE FROM [$table] WHERE [$whereField] = '$whereValue'";
+    return mssql($sql);
+}
+
+
+
 ?>
 

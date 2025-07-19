@@ -6,7 +6,8 @@ include "modbus.php";
 //chargement des entree modbus
 $result = mssql("SELECT Id,Addresse,Port FROM [dbo].[DefModBus]");
 $defModBusData = [];
-while ($row = sqlnext($result)) $defModBusData[$row["Id"]] = $row;
+    while ($row = sqlnext($result))
+        $defModBusData[$row["Id"]] = $row;
 
 
 function LireModbus($socket, $unitId, $startAddress, $type) {
@@ -43,8 +44,8 @@ while ($row = sqlnext($resultUnite))
     $port = $defModBusData[$row["ModbusId"]]["Port"];
     $unitId = $row["Device"]; 
     $Id=$row["Id"];
-
-    try {
+ 
+try {
     $socket = connectModbusTcp($ip, $port);
 
     if ($socket)
@@ -103,10 +104,15 @@ while ($row = sqlnext($resultUnite))
         $Fan=0;
         $Room=0;
         $SetRoom=0;
-        $CodeErreur=100060;
+        $CodeErreur=100066;
     }
-        mssql("DELETE FROM [ValUnites] Where Id=$Id");
-        mssql("INSERT INTO [ValUnites] (Id, OnOff, Alarm, Mode, Fan, Room, SetRoom, CodeErreur) VALUES ($Id,$OnOff,$Alarm,$Mode,$Fan,$Room,$SetRoom,$CodeErreur)");            
+        // Efface uniquement si l'Id existe déjà dans ValUnites
+        $resCheck = mssql("SELECT 1 FROM [ValUnites] WHERE Id=$Id");
+        if ($resCheck && sqlsrv_fetch_array($resCheck)) 
+            {
+            mssql("DELETE FROM [ValUnites] Where Id=$Id");
+            }
+            mssql("INSERT INTO [ValUnites] (Id, OnOff, Alarm, Mode, Fan, Room, SetRoom, CodeErreur) VALUES ($Id,$OnOff,$Alarm,$Mode,$Fan,$Room,$SetRoom,$CodeErreur)");            
 } 
 catch (Exception $e) {
     echo "Erreur : " . $e->getMessage();

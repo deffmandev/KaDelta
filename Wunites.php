@@ -392,7 +392,20 @@ Function RegistreOption($valeur)
         <button id="close-settings-btn">Fermer</button>
     </div>
     <!-- Fenêtre Paramétrage Avancé -->
-    <div class="modal" id="advanced-modal" style="display:none;">
+    <div class="modal" id="advanced-modal" style="display:none; position:relative;">
+        <!-- Icône corbeille -->
+        <svg id="delete-unit-btn" title="Supprimer l'unité" style="position:absolute;top:18px;left:18px;cursor:pointer;width:32px;height:32px;fill:#d32f2f;transition:fill 0.2s;" viewBox="0 0 24 24">
+            <path d="M3 6h18v2H3V6zm2 3h14l-1.5 12.5c-.1.8-.8 1.5-1.6 1.5H8.1c-.8 0-1.5-.7-1.6-1.5L5 9zm5 2v7h2v-7h-2zm4 0v7h2v-7h-2zm-8 0v7h2v-7H6zM9 4V2h6v2h5v2H4V4h5z"/>
+        </svg>
+        <!-- Modale de confirmation suppression -->
+        <div id="delete-confirm-modal" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.35);z-index:10001;align-items:center;justify-content:center;">
+            <div style="background:#fff;padding:2em 2.5em;border-radius:16px;box-shadow:0 8px 32px #0002;text-align:center;min-width:320px;">
+                <h3 style="color:#d32f2f;margin-bottom:18px;">Confirmer la suppression ?</h3>
+                <p>Voulez-vous vraiment supprimer cette unité ?<br><b style="color:#d32f2f;">Cette action est irréversible.</b></p>
+                <button id="confirm-delete-btn" style="background:#d32f2f;color:#fff;padding:0.7em 2.2em;border:none;border-radius:22px;font-size:1.1em;font-weight:700;cursor:pointer;margin-right:1em;">Supprimer</button>
+                <button id="cancel-delete-btn" style="background:#e3f0ff;color:#0078d7;padding:0.7em 2.2em;border:none;border-radius:22px;font-size:1.1em;font-weight:700;cursor:pointer;">Annuler</button>
+            </div>
+        </div>
         <h2>Paramétrage avancé</h2>
         <form id="advanced-form" class="settings-form">
             <!-- Ligne nom appareil -->
@@ -592,7 +605,34 @@ Function RegistreOption($valeur)
         setTimeout(() => {
             modalBg.style.display = 'none';
             window.parent.OverScreenWunites.style.display = "none";
-        }, 200); // Réduction de 300ms à 200ms
+        }, 200);
+    };
+
+    // Suppression unité : ouverture modale
+    document.getElementById('delete-unit-btn').onclick = function() {
+        document.getElementById('delete-confirm-modal').style.display = 'flex';
+    };
+    // Annuler suppression
+    document.getElementById('cancel-delete-btn').onclick = function() {
+        document.getElementById('delete-confirm-modal').style.display = 'none';
+    };
+    // Confirmer suppression
+    document.getElementById('confirm-delete-btn').onclick = function() {
+        // Appel API suppression
+        const id = typeof IdUnite !== 'undefined' ? IdUnite : <?php echo json_encode($UniteId); ?>;
+        fetch('Base.php?table=DefUnites&delete=1&Id=' + encodeURIComponent(id), { method: 'GET' })
+            .then(response => response.text())
+            .then((text) => {
+                // Optionnel : vérifier le succès côté serveur
+                // console.log('Suppression:', text);
+                modalBg.classList.remove('visible');
+                setTimeout(() => {
+                    modalBg.style.display = 'none';
+                    if (window.parent && window.parent.OverScreenWunites)
+                        window.parent.OverScreenWunites.style.display = "none";
+                    
+                }, 200);
+            });
     };
 
     // Température
