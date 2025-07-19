@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#222">
+    <ImageView
+        android:id="@+id/errorLogo"
+        android:layout_width="120dp"
+        android:layout_height="120dp"
+        android:src="@drawable/LogoKaDelta"
+        android:layout_centerHorizontal="true"
+        android:layout_marginTop="60dp"
+        android:contentDescription="Logo" />
+    <TextView
+        android:id="@+id/errorTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Erreur de connexion"
+        android:textColor="#fff"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        android:layout_below="@id/errorLogo"
+        android:layout_centerHorizontal="true"
+        android:layout_marginTop="24dp" />
+    <TextView
+        android:id="@+id/errorMsg"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Impossible d acceder au site. Nouvelle tentative dans 5 secondes..."
+        android:textColor="#bbb"
+        android:textSize="16sp"
+        android:layout_below="@id/errorTitle"
+        android:layout_centerHorizontal="true"
+        android:layout_marginTop="12dp" />
+</RelativeLayout>
