@@ -62,7 +62,6 @@ while ($row = sqlnext($res)) $defauts[] = $row;
     <style>
         body {
             font-family: 'Segoe UI', Arial, sans-serif;
-            background: #f3f4f6;
             margin: 0;
             padding: 0;
         }
@@ -154,6 +153,24 @@ while ($row = sqlnext($res)) $defauts[] = $row;
             min-width: 320px;
             max-width: 90vw;
             text-align: center;
+            position: relative;
+        }
+        .modal-close-x {
+            position: absolute;
+            top: 12px;
+            right: 18px;
+            font-size: 2.1em;
+            color: #64748b;
+            background: none;
+            border: none;
+            cursor: pointer;
+            z-index: 10;
+            line-height: 1;
+            padding: 0;
+            transition: color 0.2s;
+        }
+        .modal-close-x:hover {
+            color: #ef4444;
         }
         .modal-confirm-buttons {
             display: flex;
@@ -191,9 +208,20 @@ while ($row = sqlnext($res)) $defauts[] = $row;
             };
             document.getElementById('modalConfirmYes').onclick = function() {
                 modal.classList.remove('show');
-                // Utiliser requestSubmit pour garantir l'envoi du POST même si le bouton n'est pas de type submit
                 callback(true);
             };
+            // Croix de fermeture : ferme la modale et ferme l'iframe parent si présent
+            let closeX = modal.querySelector('.modal-close-x');
+            if (closeX) {
+                closeX.onclick = function() {
+                    modal.classList.remove('show');
+                    // Ferme l'iframe parent si on est dans une iframe
+                    if (window.parent && window.parent !== window && window.parent.OverScreenWunites) {
+                        window.parent.OverScreenWunites.style.display = 'none';
+                        window.parent.OSWunite.src = '';
+                    }
+                };
+            }
         }, 10);
     }
     window.addEventListener('DOMContentLoaded', function() {
@@ -216,6 +244,16 @@ while ($row = sqlnext($res)) $defauts[] = $row;
                 return false;
             });
         });
+        // Ajout du comportement de la croix principale pour fermer l'iframe parent
+        var mainCloseX = document.querySelector('.container > .modal-close-x');
+        if (mainCloseX) {
+            mainCloseX.onclick = function() {
+                if (window.parent && window.parent !== window && window.parent.OverScreenWunites) {
+                    window.parent.OverScreenWunites.style.display = 'none';
+                    window.parent.OSWunite.src = '';
+                }
+            };
+        }
     });
     // Rafraîchissement automatique de la liste si changement détecté dans la table defauts (via crc32)
     let lastDefautCrc = <?php echo crc32(json_encode($defauts)); ?>;
@@ -233,6 +271,7 @@ while ($row = sqlnext($res)) $defauts[] = $row;
 </head>
 <body>
 <div class="container" data-defaut-count="<?php echo count($defauts); ?>">
+    <span class="modal-close-x" title="Fermer" style="position:absolute;top:18px;right:28px;z-index:1001;">&times;</span>
     <h2 style="display:flex;align-items:center;justify-content:space-between;">
         Liste des défauts
         <span style="display:flex;gap:1em;">

@@ -3,11 +3,8 @@ include "Base.php";
 include "modbus.php";
 
 $Heureactuelle = date("H:i");
-$Heureactuelle = "16:42";
 $jours_semaine = [0 => 'Dim',1 => 'Lun',2 => 'Mar',3 => 'Mer',4 => 'Jeu',5 => 'Ven',6 => 'Sam'];
 $Joursactuelle = $jours_semaine[date("w")];
-
-
 
 
 //chargement des entree modbus
@@ -22,11 +19,13 @@ $phoraires = [];
         while ($result && ($row = sqlnext($result))) 
             $phoraires[] = $row;
 
-echo "<pre>";
 //print_r($phoraires);
 
-echo "<br>Heure actuelle: " . $Heureactuelle;
-echo "<br>Jour actuel: " . $Joursactuelle;
+                                echo chr(10).chr(13)."\n\r";
+                                echo "Heure actuelle: " . $Heureactuelle;
+                                echo chr(10).chr(13)."\n\r";
+                                echo "Jour actuel: " . $Joursactuelle;
+                                echo chr(10).chr(13)."\n\r";
 
 
 foreach ($phoraires as $horaire) 
@@ -34,11 +33,12 @@ foreach ($phoraires as $horaire)
     if ($horaire[$Joursactuelle]=== 1)
     {
         $Id_ProgNom= $horaire["Id_ProgNom"];
-        echo $horaire["Id"]."-- Jours validee";
-        echo "<br>Heure: " . $horaire["Heure"];
+        echo $horaire["Id"]."-- Jours validee ";
+        echo "Heure: " . $horaire["Heure"];
         if (strpos($horaire["Heure"], $Heureactuelle) !== false) 
         {
-            echo "  ---  Horaire validee <br>";
+            echo "  ---  Horaire validee ";
+            echo chr(10).chr(13)."\n\r";
 
             $TableUnites=mssql("SELECT * FROM [DefUnites] WHERE Prog = $Id_ProgNom");
             while ($row = sqlnext($TableUnites)) 
@@ -47,8 +47,9 @@ foreach ($phoraires as $horaire)
                     $port = $defModBusData[$row["ModbusId"]]["Port"];
                     $unitId = $row["Device"]; 
                     $Id=$row["Id"];
-                    echo "Unite: " . $row["Id"] . "<br>";
-                                echo $ip . " - " . $port . " - " . $unitId . "<br>";
+                    echo "Unite: " . $row["Id"] . "  ";
+                                echo $ip . " - " . $port . " - " . $unitId;
+                                echo chr(10).chr(13)."\n\r";
 
                     try {
                             $socket = connectModbusTcp($ip, $port);
@@ -80,9 +81,5 @@ foreach ($phoraires as $horaire)
         }
     }
 }
-
-
-
-
 
 ?>

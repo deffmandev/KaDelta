@@ -185,7 +185,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST')
         {
         $adresse = strtoupper($adresse);
         $adresse = hexdec($adresse);
-        $AddresseBase=(($adresse-1)*16); 
+        $AddresseBase=(($adresse)*16); 
         $data=
     [
        'SF'             => 1

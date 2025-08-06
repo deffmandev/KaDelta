@@ -5,6 +5,21 @@ include "base.php";
         {
             $GroupeActive=true;
             $GroupeId=$_GET["Groupe"];
+            if ($GroupeId === "all") 
+            {
+                $UniteId = mssql("SELECT Id,Gr FROM [DefUnites]");
+                if ($UniteId!=null)
+                    $UniteId = sqlnext($UniteId);
+                if ($UniteId!=null) $UniteId=$UniteId["Id"];
+
+            }
+            else
+            {
+                $UniteId = mssql("SELECT Id,Gr FROM [DefUnites] WHERE Gr = $GroupeId");
+                if ($UniteId!=null)
+                    $UniteId = sqlnext($UniteId);
+                if ($UniteId!=null) $UniteId=$UniteId["Id"];
+            }
         }
     else
         {    
@@ -14,9 +29,12 @@ include "base.php";
 
     if (isset($_GET["IdSel"]))     
         $UniteId = $_GET["IdSel"];
-    else 
-        $UniteId = 1;
 
+if (!isset($UniteId)) 
+{
+    echo '<script>window.parent.OverScreenWunites.style.display = "none";</script>';
+    exit(0);
+}
 
     echo '
     <script>

@@ -12,8 +12,8 @@ body
     display:none;
     border: 1px solid #716f6f;
     display: block;
-    height: 73px;
-    width: 172px;
+    height: 80px;
+    width: 180px;
     padding: 14px;
     position: relative;
     box-shadow: inset 4px 4px 10px 2px #00000087;
@@ -22,23 +22,47 @@ body
 
 .ViOff
 {
-    background: linear-gradient(#6f6c6c,#aaa,#6f6c6c);
+    background: none;
 }
 
 .ViOnClim
 {
-    background: linear-gradient(#565eb7, #4451eb87, #565eb7)
+    background: linear-gradient(#565eb7, #4451eb87, #565eb7),
+    url('images/clim.png') no-repeat center/100px 100px;
 }
 
 .ViOnDefaut
 {
-    background: linear-gradient(#ed0000, #ff6d3496, #b90e0e)
+    background:
+        linear-gradient(#ed0000, #ff6d3496, #b90e0e),
+        url('images/defaut.png') no-repeat center/100px 100px;
 }
 
 .ViOnChaud
 {
-    background: linear-gradient(#cccd21, #e9ac38c4, #bfb42d)
+    background: linear-gradient(#cccd21, #e9ac38c4, #bfb42d),
+        url('images/chaud.png') no-repeat center/100px 100px;
+
 }
+
+.ViOnDry
+{
+    background:linear-gradient(#e5efdb, #d5c7acc4, #a7a69fa6), 
+        url(images/dry.png) no-repeat center / 100px 100px
+}
+
+.ViOnFan
+{
+    background:linear-gradient(#cd7bcc, #c094c3a8, #8c6397), 
+        url(images/fan.png) no-repeat center / 100px 100px
+}
+
+.ViOnAuto
+{
+    background:linear-gradient(#4e85d5f0, #8da8e5d1, #dfbddfa3, #dd7e7e), 
+        url(images/auto.png) no-repeat center / 100px 100px
+}
+
 
 .ViT1
 {
@@ -46,7 +70,7 @@ body
     left: 6px;
     position: absolute;
     font-size: 23px;
-    font-weight: 700;
+    text-shadow: 2px 1px 2px black;
     font-family: math;
     width: 96%;
     height: 26px;
@@ -77,12 +101,46 @@ body
 
 .ViT4
 {
-    top: 70px;
-    left: 14px;
+    top: 63px;
+    left: 8px;
     position: absolute;
     font-size: 20px;
     font-weight: 100;
     font-family: math;
+}
+
+.fan1
+{
+        background: linear-gradient(150deg, #00000085, #0000002b 60%, #c1ababad 100%), url(images/fan1.png) no-repeat center center;
+        background-size: 100% 100%, 32px 32px;
+        border-radius: 43px;
+        width: 42px;
+        height: 40px;
+
+}
+.fan2
+{
+        background: linear-gradient(150deg, #00000085, #0000002b 60%, #c1ababad 100%), url(images/fan2.png) no-repeat center center;
+        background-size: 100% 100%, 32px 32px;
+        border-radius: 43px;
+        width: 42px;
+        height: 40px;
+}
+.fan3
+{
+        background: linear-gradient(150deg, #00000085, #0000002b 60%, #c1ababad 100%), url(images/fan3.png) no-repeat center center;
+        background-size: 100% 100%, 32px 32px;
+        border-radius: 43px;
+        width: 42px;
+        height: 40px;
+}
+.fan4
+{
+        background: linear-gradient(150deg, #00000085, #0000002b 60%, #c1ababad 100%), url(images/fan4.png) no-repeat center center;
+        background-size: 100% 100%, 32px 32px;
+        border-radius: 43px;
+        width: 42px;
+        height: 40px;
 }
 
 .ViT5

@@ -1,16 +1,56 @@
 <?php
 
-function connectModbusTcp($ip, $port = 502, $timeout = 0.20) 
+function erreurbus($message) 
+{
+    echo chr(10).chr(13)."\n\r";
+    echo "Erreur Modbus : $message\n\r";
+    echo chr(10).chr(13)."\n\r";
+    //exit(0);
+}
+
+function connectModbusTcp($ip, $port = 502, $timeout = 1) 
 {
     $socket = @fsockopen($ip, $port, $errno, $errstr, $timeout);
+    if (!$socket) {
+        erreurbus("Connexion échouée à $ip:$port - $errstr ($errno)");
+        return false;
+    }
     return $socket;
 }
 
 function CloseModbusTcp($socket) 
 {
-    if ($socket) {
-        fclose($socket);
+    if ($socket) 
+        {
+        try {
+            @fclose($socket);
+        } catch (Throwable $e) {
+            // On ignore toute erreur de fermeture
+        }
     }
+}
+
+function safe_fwrite($socket, $data, $timeout = 1) {
+    if (!$socket) return false;
+    stream_set_timeout($socket, $timeout);
+    $result = @fwrite($socket, $data);
+    $meta = stream_get_meta_data($socket);
+    if ($meta['timed_out']) {
+        erreurbus("Timeout lors de l'écriture Modbus (fwrite)");
+        return false;
+    }
+    return $result;
+}
+function safe_fread($socket, $length, $timeout = 1) {
+    if (!$socket) return false;
+    stream_set_timeout($socket, $timeout);
+    $data = @fread($socket, $length);
+    $meta = stream_get_meta_data($socket);
+    if ($meta['timed_out']) {
+        erreurbus("Timeout lors de la lecture Modbus (fread)");
+        return false;
+    }
+    return $data;
 }
 
 function readModbusRegisters($socket, $unitId, $startAddress, $quantity) 
@@ -25,28 +65,28 @@ function readModbusRegisters($socket, $unitId, $startAddress, $quantity)
     $adu = pack('nnnC', $transactionId, $protocolId, $length, $unitId);
     $adu .= pack('Cnn', $functionCode, $startAddress, $quantity);
 
-    // Envoi de la requête
-    fwrite($socket, $adu);
+    safe_fwrite($socket, $adu);
 
-    // Lecture de l'en-tête de réponse (7 octets)
-    $header = fread($socket, 7);
+    $header = safe_fread($socket, 7);
 
     if (strlen($header) < 7) {
-        throw new Exception("En-tête Modbus TCP reçu incomplet");
+        erreurbus("En-tête Modbus TCP reçu incomplet");
+        return false;
     }
     $data = unpack('ntransactionId/nprotocolId/nlength/CunitId', $header);
 
-    // Lecture des octets restants
     $remaining = $data['length']-1;
-    $payload = fread($socket, $remaining);
+    $payload = safe_fread($socket, $remaining);
 
     if (strlen($payload) < $remaining) {
-        throw new Exception("Charge utile Modbus TCP reçue incomplète");
+        erreurbus("Charge utile Modbus TCP reçue incomplète");
+        return false;
     }
 
     $response = unpack('CfunctionCode/CbyteCount', substr($payload, 0, 2));
     if ($response['functionCode'] != $functionCode) {
-        throw new Exception("Exception Modbus ou code fonction inattendu");
+        erreurbus("Exception Modbus ou code fonction inattendu");
+        return false;
     }
 
     $registers = [];
@@ -70,17 +110,21 @@ function writeModbusCoil($socket, $unitId, $coilAddress, $value)
     $adu = pack('nnnC', $transactionId, $protocolId, $length, $unitId);
     $adu .= pack('Cnn', $functionCode, $coilAddress, $coilValue);
 
-    fwrite($socket, $adu);
+    safe_fwrite($socket, $adu);
 
-    $response = fread($socket, 12);
+    $response = safe_fread($socket, 12);
     if (strlen($response) < 12) {
-        throw new Exception("Réponse Modbus TCP incomplète reçue (écriture coil)");
+        erreurbus("Réponse Modbus TCP incomplète reçue (écriture coil)");
+        
+        return false;
     }
 
     // Vérification de la réponse (optionnel)
     $resp = unpack('ntransactionId/nprotocolId/nlength/CunitId/CfunctionCode/ncoilAddress/ncoilValue', $response);
     if ($resp['functionCode'] != $functionCode) {
-        throw new Exception("Exception Modbus ou code fonction inattendu (écriture coil)");
+        erreurbus("Exception Modbus ou code fonction inattendu (écriture coil)");
+        
+        return false;
     }
 
     return true;
@@ -101,12 +145,13 @@ function writeModbusRegister($socket, $unitId, $registerAddress, $value)
     $adu .= pack('Cnn', $functionCode, $registerAddress, $value);
 
     // Envoi de la requête au serveur Modbus
-    fwrite($socket, $adu);
+    safe_fwrite($socket, $adu);
 
     // Lecture de la réponse (12 octets attendus)
-    $response = fread($socket, 12);
+    $response = safe_fread($socket, 12);
     if (strlen($response) < 12) {
-        throw new Exception("Réponse Modbus TCP incomplète reçue");
+        erreurbus("Réponse Modbus TCP incomplète reçue");
+        return false;
     }
 
     // Si tout s'est bien passé, retourne vrai
@@ -131,26 +176,27 @@ function readModbusCoil($socket, $unitId, $startAddress, $quantity = 1)
     $adu = pack('nnnC', $transactionId, $protocolId, $length, $unitId);
     $adu .= pack('Cnn', $functionCode, $startAddress, $quantity);
 
-    fwrite($socket, $adu);
+    safe_fwrite($socket, $adu);
 
-    $header = fread($socket, 7);
+    $header = safe_fread($socket, 7);
     if (strlen($header) < 7) {
-        fclose($socket);
-        throw new Exception("En-tête Modbus TCP reçu incomplet (fonction 1)");
+        erreurbus("En-tête Modbus TCP reçu incomplet coil (fonction 1) ",strlen($header));
+        return false;
     }
+    
     $data = unpack('ntransactionId/nprotocolId/nlength/CunitId', $header);
-
+    
     $remaining = $data['length']-1;
-    $payload = fread($socket, $remaining);
+    $payload = safe_fread($socket, $remaining);
     if (strlen($payload) < $remaining) {
-        fclose($socket);
-        throw new Exception("Charge utile Modbus TCP reçue incomplète (fonction 1)");
+        erreurbus("Charge utile Modbus TCP reçue incomplète (fonction 1)");
+        return false;
     }
 
     $response = unpack('CfunctionCode/CbyteCount', substr($payload, 0, 2));
     if ($response['functionCode'] != $functionCode) {
-        fclose($socket);
-        throw new Exception("Exception Modbus ou code fonction inattendu (fonction 1)");
+        erreurbus("Exception Modbus ou code fonction inattendu (fonction 1)");
+        return false;
     }
 
     $coilByte = ord($payload[2]);
@@ -158,7 +204,6 @@ function readModbusCoil($socket, $unitId, $startAddress, $quantity = 1)
     for ($i = 0; $i < $quantity; $i++) {
         $coils[] = ($coilByte >> $i) & 0x01;
     }
-
     return $coils;
 }
 
@@ -212,6 +257,31 @@ function ModbusWrite($socket,$Unite,$StartAddress,$type,$valeur)
 
 }
 
+function LireModbus($socket, $unitId, $startAddress, $type) {
+    if ($type == "1")   
+    {
+        return readModbusCoil($socket, $unitId, $startAddress, 1)[0];
+    } 
+    if ($type == "3") 
+    {
+        return readModbusRegisters($socket, $unitId, $startAddress, 1)[0];
+    }
+
+    if ($type > "299")   
+    {
+
+        $valeur = readModbusRegisters($socket, $unitId, $startAddress, 1)[0];
+        $ValBit=to16BitBinary($valeur);
+        $bit=15-($type-300);
+        if ($ValBit[$bit] === '1') {
+            return 1; // Le bit est à 1
+        } else {
+            return 0; // Le bit est à 0
+        }
+    } 
+
+    
+}
 
  
 ?>

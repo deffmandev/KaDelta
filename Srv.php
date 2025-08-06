@@ -1,147 +1,57 @@
 <?php
-include "Base.php";
-include "modbus.php";
+ini_set('display_errors', 0);
+ini_set('display_startup_errors', 0);
+error_reporting(0);
 
+setlocale(LC_TIME, 'fr_FR.UTF-8');
+date_default_timezone_set('Europe/Paris');
 
-//chargement des entree modbus
-$result = mssql("SELECT Id,Addresse,Port FROM [dbo].[DefModBus]");
-$defModBusData = [];
-    while ($row = sqlnext($result))
-        $defModBusData[$row["Id"]] = $row;
-
-
-function LireModbus($socket, $unitId, $startAddress, $type) {
-    if ($type == "1")   
-    {
-        return readModbusCoil($socket, $unitId, $startAddress, 1)[0];
-    } 
-    if ($type == "3") 
-    {
-        return readModbusRegisters($socket, $unitId, $startAddress, 1)[0];
-    }
-
-    if ($type > "299")   
-    {
-
-        $valeur = readModbusRegisters($socket, $unitId, $startAddress, 1)[0];
-        $ValBit=to16BitBinary($valeur);
-        $bit=15-($type-300);
-        if ($ValBit[$bit] === '1') {
-            return 1; // Le bit est à 1
-        } else {
-            return 0; // Le bit est à 0
-        }
-    } 
-
-    
-}
-
-
-$resultUnite = mssql("SELECT * FROM [dbo].[DefUnites]");
-while ($row = sqlnext($resultUnite)) 
+// Fonction d'affichage en français sans strftime
+function date_fr($format, $timestamp = null) 
 {
-    $ip = $defModBusData[$row["ModbusId"]]["Addresse"];
-    $port = $defModBusData[$row["ModbusId"]]["Port"];
-    $unitId = $row["Device"]; 
-    $Id=$row["Id"];
- 
-try {
-    $socket = connectModbusTcp($ip, $port);
-
-    if ($socket)
-    {
-    $type= $row["Type_OnOff"];$startAddress= $row["OnOff"];
-    $OnOff=LireModbus($socket,$unitId,$startAddress,$type);
-
-    $type= $row["Type_Alarm"];$startAddress= $row["Alarm"];
-    $Alarm=LireModbus($socket,$unitId,$startAddress,$type); 
-
-    $type= $row["Type_Mode"];$startAddress=$row["Mode"];
-    $Mode=LireModbus($socket,$unitId,$startAddress,$type);
-
-    $type= $row["Type_Fan"];$startAddress=$row["Fan"];
-    $Fan=LireModbus($socket,$unitId,$startAddress,$type);
-
-    $type= $row["Type_Room"];$startAddress=$row["Room"];
-    $Room=LireModbus($socket,$unitId,$startAddress,$type);
-
-    $type= $row["Type_SetRoom"];$startAddress=$row["SetRoom"];
-    $SetRoom=LireModbus($socket,$unitId,$startAddress,$type);
-
-            if ($Mode === 1) // Mode Climatisation
-        {
-            if ($SetRoom < $row["LimiteClimB"]) ModbusWrite($socket,$unitId,$startAddress,$type,$row["LimiteClimB"]);
-            if ($SetRoom > $row["LimiteClimH"]) ModbusWrite($socket,$unitId,$startAddress,$type,$row["LimiteClimH"]);
-        }
-            if ($Mode === 5) // Mode Chauffage
-        {
-            if ($SetRoom < $row["LimiteChaudB"]) ModbusWrite($socket,$unitId,$startAddress,$type,$row["LimiteChaudB"]);
-            if ($SetRoom > $row["LimiteChaudH"]) ModbusWrite($socket,$unitId,$startAddress,$type,$row["LimiteChaudH"]);
-        }
-
-            if ($Mode === 4) // Mode Automatique
-        {
-            $Minimum = min($row["LimiteChaudB"], $row["LimiteClimB"]);
-            $Maximum = max($row["LimiteChaudH"], $row["LimiteClimH"]);
-            
-            if ($SetRoom < $Minimum)  ModbusWrite($socket,$unitId,$startAddress,$type,$Minimum);
-            if ($SetRoom > $Maximum)  ModbusWrite($socket,$unitId,$startAddress,$type,$Maximum);
-        }
-
-
-    $type= $row["Type_CodeErreur"];$startAddress=$row["CodeErreur"];
-    $CodeErreur=LireModbus($socket,$unitId,$startAddress,$type);
-
-
-
-    fclose($socket);
-    }
-    else
-    {
-        $OnOff=0;
-        $Alarm=1;
-        $Mode=0;
-        $Fan=0;
-        $Room=0;
-        $SetRoom=0;
-        $CodeErreur=100066;
-    }
-        // Efface uniquement si l'Id existe déjà dans ValUnites
-        $resCheck = mssql("SELECT 1 FROM [ValUnites] WHERE Id=$Id");
-        if ($resCheck && sqlsrv_fetch_array($resCheck)) 
-            {
-            mssql("DELETE FROM [ValUnites] Where Id=$Id");
-            }
-            mssql("INSERT INTO [ValUnites] (Id, OnOff, Alarm, Mode, Fan, Room, SetRoom, CodeErreur) VALUES ($Id,$OnOff,$Alarm,$Mode,$Fan,$Room,$SetRoom,$CodeErreur)");            
-} 
-catch (Exception $e) {
-    echo "Erreur : " . $e->getMessage();
+    $jours = ['Sunday'=>'Dimanche','Monday'=>'Lundi','Tuesday'=>'Mardi','Wednesday'=>'Mercredi','Thursday'=>'Jeudi','Friday'=>'Vendredi','Saturday'=>'Samedi'];
+    $mois = ['January'=>'Janvier','February'=>'Février','March'=>'Mars','April'=>'Avril','May'=>'Mai','June'=>'Juin','July'=>'Juillet','August'=>'Août','September'=>'Septembre','October'=>'Octobre','November'=>'Novembre','December'=>'Décembre'];
+    $date = date($format, $timestamp ?? time());
+    $date = strtr($date, $jours);
+    $date = strtr($date, $mois);
+    return $date;
 }
-
-}
-
-
-       // GetTable("ValUnites");
-
-    echo strftime("Dernière mise à jour : %A %d %B %Y %H:%M:%S", time());
+echo "Dernière mise à jour : " . date_fr("l d F Y H:i:s");
    
 if (!empty($_GET["Commande"])) 
-{
     echo $_GET["Commande"];
-}
 
-// Appel automatique à SrvProg.php toutes les minutes (via variable/fichier local)
-$lastSrvProgFile = __DIR__ . '/last_srvprog.txt';
+
 $now = time();
 $lastCall = 0;
-if (file_exists($lastSrvProgFile)) {
-    $lastCall = (int)file_get_contents($lastSrvProgFile);
-}
-if ($now - $lastCall >= 60) {
-    // Appel SrvProg.php
-    $srvprog_result = @file_get_contents('http://localhost/SrvProg.php');
-    file_put_contents($lastSrvProgFile, $now);
-    echo htmlspecialchars($srvprog_result);
-}
+$Memocompte=$_COOKIE["compte"];
+$lastCall = (int)$_COOKIE["compteTime"];
 
+    if ($now - $lastCall >= 5) 
+    {
+            echo "   ";
+            $Comp = (int)(($now - $lastCall)/10);
+            echo $Comp."=".$Memocompte;
+            if ($Memocompte != $Comp)
+            {
+                // Appel SrvLG.php
+                setcookie("compte", $Comp, time() + 3600, "/"); // Mettre à jour le cookie avec la nouvelle valeur
+                $srvprog_result = @file_get_contents('http://localhost/SrvLG.php');
+                $cal=($val2time - $val1time);
+                echo htmlspecialchars($srvprog_result);
+            }
+            echo chr(10).chr(13)."\n\r";
+
+    }
+
+
+    if ($now - $lastCall >= 60) 
+    {
+        // Appel SrvProg.php
+        setcookie("compteTime", $now, time() + 3600, "/"); // Mettre à jour le cookie avec le temps actuel
+        $srvprog_result = @file_get_contents('http://localhost/SrvProg.php');
+        echo htmlspecialchars($srvprog_result);
+    }
+
+    sleep(2);
 ?>

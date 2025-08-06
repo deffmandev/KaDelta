@@ -15,8 +15,8 @@
 <div class="TitreGroupe">
   <button id="btn-groupe" class="groupe-btn">Groupe</button>
   <button onclick="ClimGroupe()" class="groupe-btn">Action sur<br>groupe</button>
-  <button id="fullscreen-btn" class="groupe-btn">Plein écran</button>
   <button id="btn-programmation" class="groupe-btn">Programmation</button>
+  <button id="btn-defaut" class="groupe-btn">Défauts</button>
   <button onclick="MaintenanceWindows()" class="groupe-btn">Maintenance</button>
 </div>
 
@@ -44,20 +44,7 @@ function updateDateHeure() {
 updateDateHeure();
 setInterval(updateDateHeure, 1000);
 </script>
-
-
-
-<script>
-document.getElementById('fullscreen-btn').addEventListener('click', function() {
-  if (!document.fullscreenElement) {
-    document.documentElement.requestFullscreen();
-  } else {
-    document.exitFullscreen();
-  }
-});
-</script>
-
-    
+   
 </head>
 <body>
 
@@ -454,7 +441,9 @@ function UpdateVignettes(data) {
             vignette.querySelector('.ViT1').textContent = item.Name;
             vignette.querySelector('.ViT2').textContent = item.Room + '°C';
             vignette.querySelector('.ViT3').textContent = item.SetRoom + '°C';
-            vignette.querySelector('.ViT4').textContent = item.Fan;
+            //vignette.querySelector('.ViT4').textContent = item.Fan;
+            vignette.querySelector('.ViT4').style.display = "block";
+            vignette.querySelector('.ViT4').className = "ViT4 fan"+item.Fan;
             vignette.querySelector('.ViT5').textContent = item.Gr;
             vignette.setAttribute('data-groupe', item.Gr);
             filtrerParGroupeNumero(NumeroDeGroupeValide);
@@ -462,16 +451,20 @@ function UpdateVignettes(data) {
             if (item.OnOff === 1) {
                 vignette.className = "Vignette ViOnClim";
                 if (item.Mode === 5) vignette.className = "Vignette ViOnChaud";
-                if (item.Mode === 3) vignette.className = "Vignette ViOnDefaut";
-                if (item.Mode === 2) vignette.className = "Vignette ViChaud";
+                if (item.Mode === 3) vignette.className = "Vignette ViOnFan";
+                if (item.Mode === 2) vignette.className = "Vignette ViOnDry";
+                if (item.Mode === 4) vignette.className = "Vignette ViOnAuto";
             } else {
                 vignette.className = "Vignette ViOff";
+                vignette.querySelector('.ViT4').style.display = "none";
+
             }
         }
         if (item.Alarm === 1) {
             vignette.className = "Vignette ViOnDefaut";
             vignette.querySelector('.ViT2').textContent = "ALARM";
             vignette.querySelector('.ViT3').textContent = item.CodeErreur;
+            vignette.querySelector('.ViT4').style.display = "none";
             vignette.querySelector('.ViT4').textContent = "";
         }
     });
@@ -557,6 +550,13 @@ function openProgrammation() {
   document.getElementById('OSWunite').src = "Programme.php";
 }
 document.getElementById('btn-programmation').onclick = openProgrammation;
+
+// Ajout ouverture Defaut.php en plein écran via overlay
+function openDefaut() {
+  document.getElementById('OverScreenWunites').style.display = "block";
+  document.getElementById('OSWunite').src = "Defaut.php";
+}
+document.getElementById('btn-defaut').onclick = openDefaut;
 </script>
 </body>
 </html>

@@ -80,7 +80,14 @@ function mssql($sql)
 
 function sqlnext($base)
 {
-    return sqlsrv_fetch_array($base);
+    try {
+        $Reponce=sqlsrv_fetch_array($base);
+        }
+    catch (Exception $e) 
+        {
+            $Reponce=null;
+        }
+    return $Reponce;
 }
 
 function mssqlinfo()
