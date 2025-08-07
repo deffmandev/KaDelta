@@ -30,14 +30,13 @@ $lastCall = (int)$_COOKIE["compteTime"];
     if ($now - $lastCall >= 5) 
     {
             echo "   ";
-            $Comp = (int)(($now - $lastCall)/10);
+            $Comp = (int)(($now - $lastCall)/5);
             echo $Comp."=".$Memocompte;
             if ($Memocompte != $Comp)
             {
                 // Appel SrvLG.php
                 setcookie("compte", $Comp, time() + 3600, "/"); // Mettre à jour le cookie avec la nouvelle valeur
                 $srvprog_result = @file_get_contents('http://localhost/SrvLG.php');
-                $cal=($val2time - $val1time);
                 echo htmlspecialchars($srvprog_result);
             }
             echo chr(10).chr(13)."\n\r";
@@ -53,5 +52,5 @@ $lastCall = (int)$_COOKIE["compteTime"];
         echo htmlspecialchars($srvprog_result);
     }
 
-    sleep(2);
+    sleep(1);
 ?>

@@ -260,17 +260,23 @@ function ModbusWrite($socket,$Unite,$StartAddress,$type,$valeur)
 function LireModbus($socket, $unitId, $startAddress, $type) {
     if ($type == "1")   
     {
-        return readModbusCoil($socket, $unitId, $startAddress, 1)[0];
+        $tempon=readModbusCoil($socket, $unitId, $startAddress, 1);
+            if ($tempon !== false) $tempon=$tempon[0]; 
+                return $tempon;
     } 
     if ($type == "3") 
     {
-        return readModbusRegisters($socket, $unitId, $startAddress, 1)[0];
+        $tempon = readModbusRegisters($socket, $unitId, $startAddress, 1);
+            if ($tempon !== false) $tempon=$tempon[0];
+                return $tempon;
     }
 
     if ($type > "299")   
     {
 
-        $valeur = readModbusRegisters($socket, $unitId, $startAddress, 1)[0];
+        $tempon = readModbusRegisters($socket, $unitId, $startAddress, 1);
+        if ($tempon === false) return false;
+        $valeur = $tempon[0];
         $ValBit=to16BitBinary($valeur);
         $bit=15-($type-300);
         if ($ValBit[$bit] === '1') {
