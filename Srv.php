@@ -50,6 +50,10 @@ $lastCall = (int)$_COOKIE["compteTime"];
         setcookie("compteTime", $now, time() + 3600, "/"); // Mettre à jour le cookie avec le temps actuel
         $srvprog_result = @file_get_contents('http://localhost/SrvProg.php');
         echo htmlspecialchars($srvprog_result);
+
+        $srvprog_result = @file_get_contents('http://localhost/SrvDefaut.php');
+        echo htmlspecialchars($srvprog_result);
+
     }
 
     sleep(1);
