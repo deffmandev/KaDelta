@@ -1,10 +1,14 @@
 <?php
- error_reporting(E_ALL);
-    include "Style.php";
-    include "Base.php";
+error_reporting(E_ALL);
+include "Style.php";
+include "Base.php";
+// Barre de titre réutilisable
+include "TopBar.php";
 ?>
 
 <style>
+/* Décalage sous la barre réutilisable si besoin */
+.tabs { margin-top: 12px; }
 
 
 .cadreCTA {
@@ -64,8 +68,8 @@
 
 .eti2
 {
-    top: 307px;
-    left: 256px;
+    top: 106px;
+    left: 378px;
 }
 
 .eti3
@@ -124,7 +128,7 @@
 
 .eti12
 {
-    top: 61px;
+    top: 63px;
     left: 378px;
 }
 
@@ -173,6 +177,23 @@
     font-family: fangsong;
     font-weight: 900;
 }
+
+.tt6
+{
+       top: 102px;
+    left: 295px;
+    text-align: right;
+}
+
+.tt7
+{
+    top: 445px;
+    left: 20px;
+    font-family: monospace;
+    text-align: right;
+    color: #000000;
+}
+
 
 .tabs {
   margin-bottom: 0;
@@ -228,6 +249,7 @@
   vertical-align: middle;
   margin-right: 4px;
   margin-left:-18px;
+  margin-top:-6px;
   filter: brightness(0) saturate(100%) invert(18%) sepia(99%) saturate(7492%) hue-rotate(-1deg) brightness(97%) contrast(119%);
 }
 </style>
@@ -259,8 +281,10 @@
       <div class="labeltt tt1">Compresseur 1</div>
       <div class="labeltt tt2">Compresseur 2</div>
       <div class="labeltt tt3">Température<br>Ambiante</div>
-      <div class="labeltt tt4">Consigne<br>Ambiante</div>
+      <div class="labeltt tt4">Consigne<br>en froid</div>
       <div class="labeltt tt5">Code défaut</div>
+      <div class="labeltt tt6">Consigne<br>en chaud</div>
+      <div class="labeltt tt7">Heures du rooftop</div>
     </div>
   </div>
 <?php } ?>
@@ -348,14 +372,30 @@ function renderLennoxToTab(id, data) {
     if (!tab) return;
     // Map des indices de données vers les sélecteurs
     const mapping = [
-      ['.eti1', 40], ['.eti2', 1], ['.eti3', 39], ['.eti4', 36], ['.eti5', 38], ['.eti6', 45],
-      ['.eti7', 6], ['.eti8', 7], ['.eti9', 8], ['.eti10', 9], ['.eti11', 37], ['.eti12', 11],
+      ['.eti1', 40], ['.eti2', 3], ['.eti3', 39], ['.eti4', 36], ['.eti5', 38], ['.eti6', 45],
+      ['.eti7', 143], ['.eti8', 135], ['.eti9', 137], ['.eti10', 140], ['.eti11', 37], ['.eti12', 2], ['.tt7',20]
     ];
 
     // Si data absent, tenter d'utiliser le cache ou remplir avec '-'
     let source = data;
     if (!Array.isArray(source)) {
       source = (window.lennoxTabData && window.lennoxTabData[id]) ? window.lennoxTabData[id] : [];
+    }
+
+    // Gestion simplifiée de l'icône : opacité statique, aucune trace de clignotement
+    try {
+      const btns = document.querySelectorAll('.tab-button');
+      const btn = btns[idx];
+      if (btn) {
+      const img = btn.querySelector('.tab-icon-red');
+      const code36 = Array.isArray(source) && source.length > 36 ? source[36] : null;
+      // Déterminer l'opacité finale sans clignoter
+      if (img) {
+        img.style.opacity = (code36 !== null && code36 !== undefined && code36 !== 0 && code36 !== '0') ? '1' : '0';
+      }
+      }
+    } catch (e) {
+      console.error('Erreur gestion icone tab (opacité statique):', e);
     }
 
     mapping.forEach(([sel, index]) => {
@@ -365,7 +405,11 @@ function renderLennoxToTab(id, data) {
       if (Array.isArray(source) && source.length > index) {
         let val = String(source[index]);
         // Si la longueur dépasse 6 caractères, considérer la valeur comme erronée
-        if (val.length > 6) display = '#';
+        if (val.length > 6) {
+          // Exception : si c'est le "code 20" (index 20) on n'affiche pas '#' ni on ne crée un défaut — on met '-' à la place
+          if (index === 20) display = val;
+          else display = '#';
+        }
         else display = val;
       }
       el.textContent = display;
