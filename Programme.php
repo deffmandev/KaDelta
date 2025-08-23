@@ -85,7 +85,7 @@ $colonnes = ['Nom'];
         html { box-sizing: border-box; }
         *, *:before, *:after { box-sizing: inherit; }
         body { font-family: 'Segoe UI',Arial,sans-serif;  margin: 0; }
-        .container { max-width: 1080px; margin: 4vw auto; background: #fff; border-radius: 18px; box-shadow: 0 4px 24px #0002; padding: 2vw 3vw; }
+        .container { width: 1080px; margin: 4vw auto; background: #fff; border-radius: 18px; box-shadow: 0 4px 24px #0002; padding: 2vw 3vw; }
         h2 { margin-bottom: 2vw; font-size: 2em; color: #2c3e50; }
         .btn { display: inline-block; padding: 1em 2em; border: none; border-radius: 8px; cursor: pointer; font-size: 1.1em; margin: 0.2em 0.2em 0.2em 0; transition: background 0.2s, color 0.2s; }
         .btn-primary { background: #2563eb; color: #fff; }

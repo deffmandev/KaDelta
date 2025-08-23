@@ -12,8 +12,8 @@ body
     display:none;
     border: 1px solid #716f6f;
     display: block;
-    height: 80px;
-    width: 180px;
+    height: 90px;
+    width: 190px;
     padding: 14px;
     position: relative;
     box-shadow: inset 4px 4px 10px 2px #00000087;
@@ -22,7 +22,7 @@ body
 
 .ViOff
 {
-    background: none;
+    background: none,url(images/standby.png) no-repeat center / 100px 100px;
 }
 
 .ViOnClim
@@ -89,7 +89,7 @@ body
 
 .ViT3
 {
-    top: 73px;
+    top: 93px;
     right: 7px;
     position: absolute;
     font-size: 19px;
@@ -101,7 +101,7 @@ body
 
 .ViT4
 {
-    top: 63px;
+    top: 73px;
     left: 8px;
     position: absolute;
     font-size: 20px;

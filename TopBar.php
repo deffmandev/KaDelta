@@ -1,6 +1,3 @@
-<?php
-// Barre de titre réutilisable : logo, titre, boutons principaux, horloge.
-?>
 <div class="FrameTitre">
     <img src="Images/LogoKaDelta.png" alt="Ka Delta Logo" style="height:172px;" />
     <h1>Ka Delta Modbus</h1>

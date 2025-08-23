@@ -1,3 +1,4 @@
+<?php include "Style.php";?>
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -47,7 +48,6 @@
     <?php
     // --- PHP : Chargement des unités ---
     error_reporting(E_ALL);
-    include "Style.php";
     include "Base.php";
 
     $names = [];
@@ -206,9 +206,6 @@
         setTimeout(()=>{ if(!firstDataShown){ const ld=document.getElementById('initial-loader'); if(ld){ ld.classList.add('fade-out'); setTimeout(()=>ld.remove(),600); } } }, 4000);
         loopUpLoadData();
 
-    // Rafraîchissement groupes désormais géré par TopBar
-
-    // Menu Pages géré par TopBar
     </script>
 </body>
 </html>
