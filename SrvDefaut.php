@@ -42,7 +42,7 @@ if ($res) {
 }
 
 // --- Contrôle des enregistrements existants dans Defauts ---
-$defRes = mssql("SELECT Id, Unite, Code, Etat FROM Defauts");
+$defRes = mssql("SELECT Id, Unite, Code, Etat FROM Defauts WHERE Unite <= 230");
 if ($defRes) {
     while ($d = sqlnext($defRes)) {
         if ($d === null) break;

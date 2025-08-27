@@ -3,7 +3,7 @@ header('Content-Type: application/json');
 
 include "Base.php";
 
-$sql = "SELECT vu.*, du.* FROM [DefUnites] vu JOIN [ValUnites] du ON vu.Id = du.Id";
+$sql = "SELECT vu.*, du.* FROM [DefUnites] vu JOIN [ValUnites] du ON vu.Id = du.Id ORDER BY vu.Id";
 
 try {
     $stmt = mssql($sql);

@@ -177,6 +177,7 @@ window.onload = function() {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') 
     {
     $nom = $_POST['nom'] ?? '';
+    $Id = $_POST['adresse'] ?? '';
     $adresse = $_POST['adresse'] ?? '';
     $modbus = $_POST['modbus'] ?? '';
     $device = $_POST['device'] ?? '';
@@ -188,7 +189,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST')
         $AddresseBase=(($adresse)*16); 
         $data=
     [
-       'SF'             => 1
+       'Id'             => $Id
+      ,'SF'             => 1
       ,'Gr'             => $groupe
       ,'ModbusId'       => $modbus
       ,'Device'         => $device

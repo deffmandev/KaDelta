@@ -22,6 +22,10 @@ $resUnites = mssql("SELECT Id, Name FROM DefUnites");
 while ($row = sqlnext($resUnites)) {
     $unites[$row['Id']] = $row['Name'];
 }
+// Ajoute des unites rooftop de 1 a 3 dans les addresses de 501 a 503
+$unites[501] = "RoofTop 1";
+$unites[502] = "RoofTop 2";
+$unites[503] = "RoofTop 3";
 
 // Traitement acquittement
 if (isset($_POST['acquitte']) && isset($_POST['id'])) {
@@ -41,6 +45,7 @@ if (isset($_POST['acquitte_all'])) {
 // Traitement effacement total (seulement si etat=3)
 if (isset($_POST['delete_all'])) {
     mssql("DELETE FROM defauts WHERE etat=3");
+    mssql("DELETE FROM ValUnites");
     header('Location: Defaut.php');
     exit;
 }

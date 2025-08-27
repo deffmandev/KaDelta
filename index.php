@@ -53,7 +53,7 @@
     $names = [];
     $GroupeIdGr = [];
     try {
-        $result = mssql("SELECT Id,Name,Gr FROM DefUnites");
+        $result = mssql("SELECT Id,Name,Gr FROM DefUnites ORDER BY Id");
         if ($result) {
             while ($row = sqlnext($result)) {
                 $names[$row['Id']] = $row['Name'];
@@ -67,7 +67,7 @@
     echo "<div class='CadreUnites'>";
     if (!empty($names)) {
         $maxId = max(array_keys($names));
-        for ($Nbmax = 1; $Nbmax <= $maxId; $Nbmax++) {
+        for ($Nbmax = 0; $Nbmax <= $maxId; $Nbmax++) {
             if (!isset($names[$Nbmax])) continue;
             $nom = htmlspecialchars($names[$Nbmax], ENT_QUOTES, 'UTF-8');
             $grp = $GroupeIdGr[$Nbmax];
