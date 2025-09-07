@@ -1,6 +1,6 @@
 {
-    "modbus": "25",
-    "device1": "6",
-    "device2": "12",
-    "device3": "4"
+    "modbus": "26",
+    "device1": "1",
+    "device2": "2",
+    "device3": "3"
 }

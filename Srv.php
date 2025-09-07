@@ -37,7 +37,10 @@ $lastCall = (int)$_COOKIE["compteTime"];
                 // Appel SrvLG.php
                 setcookie("compte", $Comp, time() + 3600, "/"); // Mettre à jour le cookie avec la nouvelle valeur
                 $srvprog_result = @file_get_contents('http://localhost/SrvLG.php');
-                echo htmlspecialchars($srvprog_result);
+                    echo htmlspecialchars($srvprog_result);
+                $srvprog_result = @file_get_contents('http://localhost/SrvLennox.php');
+                    echo htmlspecialchars($srvprog_result);
+
             }
             echo chr(10).chr(13)."\n\r";
 

@@ -93,13 +93,15 @@ deviceSelectors.appendChild(createDeviceSelector('sel-device-3', 'Device Rooftop
 fetch('configurationlennox.json')
   .then(r => r.json())
   .then(cfg => {
-    if(cfg && cfg.modbus) {
-      const modbusSelect = document.getElementById('sel-modbus');
-      if(modbusSelect) modbusSelect.value = cfg.modbus;
+    console.log(cfg);
+    if(cfg && cfg.modbus) 
+    {
+      document.getElementById('sel-modbus').value = cfg.modbus;
+      document.getElementById('sel-device-1').value = cfg.device1;
+      document.getElementById('sel-device-2').value = cfg.device2;
+      document.getElementById('sel-device-3').value = cfg.device3;
     }
-    if(cfg && cfg.device1) document.getElementById('sel-device-1').value = cfg.device1;
-    if(cfg && cfg.device2) document.getElementById('sel-device-2').value = cfg.device2;
-    if(cfg && cfg.device3) document.getElementById('sel-device-3').value = cfg.device3;
+  
   })
   .catch(()=>{});
 

@@ -20,7 +20,7 @@ if ($conn === false) {
 // Gestion d'erreur centralisée
 function logSqlError($context = '') {
     $errors = sqlsrv_errors();
-    $msg = "[SQLSRV ERROR] ";
+    $msg = "[ERREUR SQLSRV] ";
     if ($context) $msg .= "($context) ";
     foreach ($errors as $error) {
         $msg .= "SQLSTATE: " . $error['SQLSTATE'] . ", Code: " . $error['code'] . ", Message: " . $error['message'] . "; ";
@@ -41,6 +41,7 @@ function GetTable($tableName)
     }
 
     echo "<table border='1' cellpadding='5'><tr>";
+    // Afficher les noms des colonnes
     // Display column names
     if ($fields = sqlsrv_field_metadata($stmt)) {
         foreach ($fields as $field) {
@@ -49,6 +50,7 @@ function GetTable($tableName)
     }
     echo "</tr>";
 
+    // Afficher les lignes
     // Display rows
     while ($row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
         echo "<tr>";
@@ -185,7 +187,6 @@ if (isset($_GET['table']))
     $whereValue = $_GET['whereValue'] ?? 1;
     updateTable($table, $field, $value, $whereField, $whereValue);
 }
-
 
 // Suppression via API GET
 if (isset($_GET['delete']) && $_GET['delete'] == '1' && isset($_GET['table']) && isset($_GET['Id'])) {

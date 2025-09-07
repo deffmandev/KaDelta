@@ -28,6 +28,25 @@ include "TopBar.php";
   </div>
 </div>
 
+<!-- Modal d'acquittement -->
+<div id="modal-acquittement">
+  <div class="modal-acquittement-content">
+    <div class="modal-acquittement-header">
+      <svg viewBox="0 0 24 24">
+        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+      </svg>
+      Confirmation d'acquittement
+    </div>
+    <div class="modal-acquittement-body">
+      Êtes-vous sûr de vouloir acquitter le défaut du <strong id="modal-rooftop-name">Rooftop X</strong> ?
+    </div>
+    <div class="modal-acquittement-buttons">
+      <button class="modal-btn modal-btn-cancel" id="modal-btn-cancel">Annuler</button>
+      <button class="modal-btn modal-btn-confirm" id="modal-btn-confirm">Acquitter</button>
+    </div>
+  </div>
+</div>
+
 <?php for ($id=0; $id < 3; $id++) { ?>
   <div class="tab-content<?php echo $id === 0 ? ' active' : ''; ?>">
     <div class="cadreCTA">
@@ -44,13 +63,22 @@ include "TopBar.php";
       <div class="etiquette eti10">-</div>
       <div class="etiquette eti11">-</div>
       <div class="etiquette eti12">-</div>
+      <div class="etiquette eti13">-</div>
+      <div class="etiquette eti14">-</div>
+      <div class="etiquette eti15">-</div>
       <div class="labeltt tt1">Compresseur 1</div>
       <div class="labeltt tt2">Compresseur 2</div>
       <div class="labeltt tt3">Température<br>Ambiante</div>
       <div class="labeltt tt4">Consigne<br>en froid</div>
       <div class="labeltt tt5">Code défaut</div>
+      <button class="btn-acquittement" data-rooftop="<?php echo $id + 1; ?>" style="display: none;">
+        <span>✓</span> Acquitter
+      </button>
       <div class="labeltt tt6">Consigne<br>en chaud</div>
       <div class="labeltt tt7">Heures du rooftop</div>
+      <div class="labeltt tt8">Vanne 1</div>
+      <div class="labeltt tt9">Vanne 2</div>
+
     </div>
   </div>
 <?php } ?>
@@ -164,7 +192,8 @@ function renderLennoxToTab(id, data) {
     // Map des indices de données vers les sélecteurs
     const mapping = [
       ['.eti1', 40], ['.eti2', 3], ['.eti3', 39], ['.eti4', 36], ['.eti5', 38], ['.eti6', 45],
-      ['.eti7', 143], ['.eti8', 135], ['.eti9', 137], ['.eti10', 140], ['.eti11', 37], ['.eti12', 2], ['.tt7',20]
+      ['.eti7', 143], ['.eti8', 135], ['.eti9', 137], ['.eti10', 140], ['.eti11', 37], ['.eti12', 2], ['.tt7',20],
+      ['.eti13', 139], ['.eti14', 142], ['.eti15', 47]
     ];
 
     // Si data absent, tenter d'utiliser le cache ou remplir avec '-'
@@ -187,6 +216,18 @@ function renderLennoxToTab(id, data) {
       }
     } catch (e) {
       console.error('Erreur gestion icone tab (opacité statique):', e);
+    }
+
+    // Gestion de l'affichage du bouton d'acquittement
+    try {
+      const btnAcquittement = tab.querySelector('.btn-acquittement');
+      if (btnAcquittement) {
+        const code36 = Array.isArray(source) && source.length > 36 ? source[36] : null;
+        const hasDefaut = code36 !== null && code36 !== undefined && code36 !== 0 && code36 !== '0';
+        btnAcquittement.style.display = hasDefaut ? 'flex' : 'none';
+      }
+    } catch (e) {
+      console.error('Erreur gestion bouton acquittement:', e);
     }
 
     mapping.forEach(([sel, index]) => {
@@ -256,4 +297,65 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   }, false);
 })();
+
+// Gestion des boutons d'acquittement
+document.addEventListener('click', function(e) {
+  if (e.target.closest('.btn-acquittement')) {
+    const btn = e.target.closest('.btn-acquittement');
+    const rooftop = btn.dataset.rooftop;
+    
+    // Afficher la modal de confirmation
+    const modal = document.getElementById('modal-acquittement');
+    const rooftopName = document.getElementById('modal-rooftop-name');
+    const btnConfirm = document.getElementById('modal-btn-confirm');
+    const btnCancel = document.getElementById('modal-btn-cancel');
+    
+    rooftopName.textContent = `Rooftop ${rooftop}`;
+    modal.style.display = 'flex';
+    
+    // Gestionnaire pour le bouton Confirmer
+    const handleConfirm = () => {
+      modal.style.display = 'none';
+      
+      // Animation du bouton
+      btn.style.background = 'linear-gradient(135deg, #6c757d, #495057)';
+      btn.innerHTML = '<span>✓</span> Acquitté';
+      btn.disabled = true;
+      
+      // Remettre le bouton normal après 3 secondes
+      setTimeout(() => {
+        btn.style.background = '';
+        btn.innerHTML = '<span>✓</span> Acquitter';
+        btn.disabled = false;
+      }, 3000);
+      
+      console.log(`Défaut acquitté pour Rooftop ${rooftop}`);
+      
+      // Nettoyer les événements
+      btnConfirm.removeEventListener('click', handleConfirm);
+      btnCancel.removeEventListener('click', handleCancel);
+      modal.removeEventListener('click', handleModalClick);
+    };
+    
+    // Gestionnaire pour le bouton Annuler
+    const handleCancel = () => {
+      modal.style.display = 'none';
+      btnConfirm.removeEventListener('click', handleConfirm);
+      btnCancel.removeEventListener('click', handleCancel);
+      modal.removeEventListener('click', handleModalClick);
+    };
+    
+    // Gestionnaire pour fermer en cliquant sur l'overlay
+    const handleModalClick = (event) => {
+      if (event.target === modal) {
+        handleCancel();
+      }
+    };
+    
+    // Ajouter les événements
+    btnConfirm.addEventListener('click', handleConfirm);
+    btnCancel.addEventListener('click', handleCancel);
+    modal.addEventListener('click', handleModalClick);
+  }
+});
 </script>

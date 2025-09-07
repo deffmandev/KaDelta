@@ -8,26 +8,44 @@ $defModBusData = [];
     while ($row = sqlnext($result))
         $defModBusData[$row["Id"]] = $row;
 
+    $ModBusmemo = "";//memoire du mode bus ouvert
+    $socket = null;
 
-
-    $resultUnite = mssql("SELECT * FROM [dbo].[DefUnites]");
+    $resultUnite = mssql("SELECT * FROM [dbo].[DefUnites] Order By ModbusId");
 while ($row = sqlnext($resultUnite)) 
 {
+        echo chr(10).chr(13)."\n\r";
+
     $ip = $defModBusData[$row["ModbusId"]]["Addresse"];
     $port = $defModBusData[$row["ModbusId"]]["Port"];
     $unitId = $row["Device"]; 
     $Id=$row["Id"];
 
-    echo "Lire unite ".$Id." Addresse : ".$ip."  port : ".$port." Premiere addresse :" . $row["OnOff"];
+    echo "Lire unite ".$Id." Addresse : ".$ip."  port : ".$port." Premiere addresse :" . $row["OnOff"]."  ";
 
 try {
-    $socket = connectModbusTcp($ip, $port);
+    $ModbusValue = $row["ModbusId"];
+    if ($ModbusValue!=$ModBusmemo)
+    {
+        $ModBusmemo = $ModbusValue;
+        if ($socket) fclose($socket);
+        $socket = connectModbusTcp($ip, $port);
+        echo " CONNECTER .";
+    }
+
     if ($socket)
     {
-    $type= $row["Type_OnOff"];$startAddress= $row["OnOff"];
-    $OnOff=LireModbus($socket,$unitId,$startAddress,$type);
-        if ($OnOff===false) Defaut();
-    else
+        $type= $row["Type_OnOff"];$startAddress= $row["OnOff"];
+        $OnOff=LireModbus($socket,$unitId,$startAddress,$type);
+
+            if ($OnOff===false)
+                {   
+                    Defaut();
+                    continue;
+                }
+    
+    
+    if (!($OnOff===false))
     {
 
     $type= $row["Type_Alarm"];$startAddress= $row["Alarm"];
@@ -71,8 +89,6 @@ try {
 
     if ($CodeErreur)
         echo "   Erreur : ".$CodeErreur;
-
-    echo chr(10).chr(13)."\n\r";
     }
 }
 
@@ -95,7 +111,6 @@ if ($OnOff!==false)
                 mssql("DELETE FROM [ValUnites] Where Id=$Id");
         
                 mssql("INSERT INTO [ValUnites] (Id, OnOff, Alarm, Mode, Fan, Room, SetRoom, CodeErreur) VALUES ($Id,$OnOff,$Alarm,$Mode,$Fan,$Room,$SetRoom,$CodeErreur)");            
-            if ($socket) fclose($socket);
     } 
 } 
 
@@ -111,6 +126,7 @@ function Defaut()
 {
         global $Id;
         global $socket;
+        global $ModBusmemo;
 
         $OnOff=0;
         $Alarm=1;
@@ -120,14 +136,12 @@ function Defaut()
         $SetRoom=0;
         $CodeErreur=100088;
 
-        echo "Defaut Unite : ".$Id." .\r\n";
+        echo "Defaut Unite : ".$Id;
 
         $resCheck = mssql("SELECT 1 FROM [ValUnites] WHERE Id=$Id");
         if ($resCheck && sqlnext($resCheck)) 
             mssql("DELETE FROM [ValUnites] Where Id=$Id");
         mssql("INSERT INTO [ValUnites] (Id, OnOff, Alarm, Mode, Fan, Room, SetRoom, CodeErreur) VALUES ($Id,$OnOff,$Alarm,$Mode,$Fan,$Room,$SetRoom,$CodeErreur)");            
-
-         if ($socket) fclose($socket);
 }
 
 ?>
