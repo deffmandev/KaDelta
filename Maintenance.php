@@ -99,10 +99,18 @@
             <button onclick="openModbusIframe()">Gestion ModBus</button>
             <button onclick="openGroupeIframe()">Gestion Groupe</button>
             <button onclick="openAjouteUniteLgIframe()">Ajoute Unité LG</button>
+            <button onclick="openContactIframe()">Contact défaut</button>
         </div>
     </div>
 </div>
 
+<!-- Modal pour l'iframe configsend.php (plein écran) -->
+<div class="modal-bg" id="contact-iframe-bg" style="z-index:10004; display:none; background:rgba(0,0,0,0.35);">
+    <div class="modal" id="contact-iframe-modal" style="width:100vw;height:100vh;max-width:100vw;max-height:100vh;padding:0;border-radius:0;overflow:hidden;background:transparent;box-shadow:none;">
+        <iframe src="" style="width:100vw;height:100vh;border:none;display:block;position:absolute;top:0;left:0;background:transparent;"></iframe>
+    </div>
+    
+</div>
 <!-- Modal pour l'iframe AjouteUniteLg.php -->
 <div class="modal-bg" id="ajoute-lg-iframe-bg" style="z-index:10003; display:none; background:rgba(0,0,0,0.35);">
     <div class="modal" id="ajoute-lg-iframe-modal" style="width:100vw;height:100vh;max-width:100vw;max-height:100vh;padding:0;border-radius:0;overflow:hidden;background:transparent;box-shadow:none;">
@@ -202,6 +210,16 @@
         setTimeout(() => {
             groupeBg.classList.add('visible');
             groupeModal.querySelector('iframe').src = 'Gtgroupe.php';
+        }, 5);
+    }
+    // Ouvre la modale iframe en plein écran pour Contact défaut (configsend.php)
+    function openContactIframe() {
+        var bg = document.getElementById('contact-iframe-bg');
+        var modal = document.getElementById('contact-iframe-modal');
+        bg.style.display = 'flex';
+        setTimeout(() => {
+            bg.classList.add('visible');
+            modal.querySelector('iframe').src = 'configsend.php';
         }, 5);
     }
     // Ferme la modale iframe Gestion Groupe depuis l'intérieur de Gtgroupe.php
