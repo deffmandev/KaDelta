@@ -321,6 +321,33 @@ document.addEventListener('click', function(e) {
       btn.style.background = 'linear-gradient(135deg, #6c757d, #495057)';
       btn.innerHTML = '<span>✓</span> Acquitté';
       btn.disabled = true;
+    
+      (async () => {
+        try {
+          const params = new URLSearchParams({ Id: rooftop, reponce: '1' });
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 3000);
+
+          const res = await fetch('LennoxAquit.php?' + params.toString(), {
+            method: 'GET',
+            headers: { 'Accept': 'text/plain' },
+            signal: controller.signal
+          });
+
+          clearTimeout(timeout);
+
+          const text = await res.text().catch(() => '');
+          if (!res.ok) {
+            console.error('Erreur HTTP LennoxAquit:', res.status, text);
+          } else {
+            console.log(text || '(vide)');
+          }
+
+          try { await getLennoxData(Number(rooftop)); } catch {}
+        } catch (e) {
+          console.error('Erreur appel LennoxAquit.php:', e);
+        }
+      })();
       
       // Remettre le bouton normal après 3 secondes
       setTimeout(() => {

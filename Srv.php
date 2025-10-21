@@ -60,6 +60,8 @@ $lastCall = (int)$_COOKIE["compteTime"];
         $srvprog_result = @file_get_contents('http://localhost/SrvSend.php');
         echo htmlspecialchars($srvprog_result);
 
+        $srvprog_result = @file_get_contents('http://localhost/SrvInLog.php');
+        echo htmlspecialchars($srvprog_result);
     }
 
     sleep(1);

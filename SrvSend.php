@@ -32,6 +32,10 @@ $resultUnites = mssql("SELECT Id,name FROM DefUnites");
         while ($resultUnites && ($rowUnite = sqlnext($resultUnites))) 
              $UnitesName[$rowUnite['Id']] = $rowUnite['name'];
 
+$UnitesName[501] = "RoofTop 1";
+$UnitesName[502] = "RoofTop 2";
+$UnitesName[503] = "RoofTop 3";
+
            
 // Fonction utilitaire : retourne true si $time est entre $start et $end (format H:i), gère passage minuit
 function isTimeBetween(string $time, string $start, string $end): bool 
