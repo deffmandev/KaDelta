@@ -100,7 +100,15 @@
             <button onclick="openGroupeIframe()">Gestion Groupe</button>
             <button onclick="openAjouteUniteLgIframe()">Ajoute Unité LG</button>
             <button onclick="openContactIframe()">Contact défaut</button>
+            <button onclick="openConfigLennoxIframe()">Configuration Lennox</button>
         </div>
+    </div>
+</div>
+
+<!-- Modal pour l'iframe configurationlennox.php (plein écran) -->
+<div class="modal-bg" id="config-lennox-iframe-bg" style="z-index:10005; display:none; background:transparent; backdrop-filter:blur(12px);">
+    <div class="modal" id="config-lennox-iframe-modal" style="width:100vw;height:100vh;max-width:100vw;max-height:100vh;padding:0;border-radius:0;overflow:hidden;background:transparent;box-shadow:none;">
+        <iframe src="" id="config-lennox-iframe" style="width:100vw;height:100vh;border:none;display:block;position:absolute;top:0;left:0;"></iframe>
     </div>
 </div>
 
@@ -175,6 +183,33 @@
         }, 5);
     }
     // Plus de croix rouge pour fermer la modale AjouteUniteLg.php
+    // Ouvre la modale iframe pour configurationlennox.php
+    function openConfigLennoxIframe() {
+        var bg = document.getElementById('config-lennox-iframe-bg');
+        bg.style.display = 'flex';
+        setTimeout(() => {
+            bg.classList.add('visible');
+            document.getElementById('config-lennox-iframe').src = 'configurationlennox.php';
+        }, 5);
+    }
+    // Fermeture overlay Config Lennox via Echap
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            var bg = document.getElementById('config-lennox-iframe-bg');
+            if (bg && bg.classList.contains('visible')) {
+                bg.classList.remove('visible');
+                setTimeout(() => { bg.style.display = 'none'; document.getElementById('config-lennox-iframe').src = ''; }, 200);
+            }
+        }
+    });
+    // Fermeture overlay Config Lennox en cliquant sur le fond
+    document.getElementById('config-lennox-iframe-bg').addEventListener('click', function(e) {
+        if (e.target === this) {
+            this.classList.remove('visible');
+            setTimeout(() => { this.style.display = 'none'; document.getElementById('config-lennox-iframe').src = ''; }, 200);
+        }
+    });
+
     // Ouvre la modale iframe quand on clique sur "Interface Lennox 109"
     document.querySelectorAll('.modal-menu button')[0].onclick = function() {
         document.getElementById('iframe-modal-bg').style.display = 'flex';
@@ -231,6 +266,20 @@
         setTimeout(() => {
             modalBg.classList.add('visible');
         }, 5);
+    });
+
+    // Fermeture overlay Configuration Lennox via postMessage
+    window.addEventListener('message', function(e) {
+        if (e.data && (e.data.action === 'configuration_cancel' || e.data.action === 'configuration_saved')) {
+            var bg = document.getElementById('config-lennox-iframe-bg');
+            if (bg && bg.classList.contains('visible')) {
+                bg.classList.remove('visible');
+                setTimeout(function() {
+                    bg.style.display = 'none';
+                    document.getElementById('config-lennox-iframe').src = '';
+                }, 200);
+            }
+        }
     });
 
     // Fermeture modale

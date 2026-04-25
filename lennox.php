@@ -13,19 +13,6 @@ include "TopBar.php";
     <button class="tab-button" onclick="showTab(1)"><img src="images/defaut.png" alt="" class="tab-icon-red">ROOFTOP 2</button>
     <button class="tab-button" onclick="showTab(2)"><img src="images/defaut.png" alt="" class="tab-icon-red">ROOFTOP 3</button>
   </div>
-  <button id="btn-config-lennox" class="config-button" title="Configuration Lennox" aria-label="Configuration Lennox">
-    <!-- Icône SVG 'gear' compacte; utilise currentColor pour hériter de la couleur système -->
-    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
-      <path d="M19.14 12.936a7.951 7.951 0 0 0 .057-1.0 7.951 7.951 0 0 0-.057-1l2.03-1.58a.5.5 0 0 0 .12-.63l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a8.05 8.05 0 0 0-1.73-.99l-.36-2.54A.5.5 0 0 0 13.6 1h-3.2a.5.5 0 0 0-.49.42l-.36 2.54c-.62.25-1.2.57-1.73.99l-2.39-.96a.5.5 0 0 0-.6.22L2.87 8.4a.5.5 0 0 0 .12.63l2.03 1.58c-.04.33-.06.67-.06 1s.02.67.06 1L2.99 14.6a.5.5 0 0 0-.12.63l1.92 3.32c.14.24.44.34.68.22l2.39-.96c.53.42 1.11.74 1.73.99l.36 2.54a.5.5 0 0 0 .49.42h3.2a.5.5 0 0 0 .49-.42l.36-2.54c.62-.25 1.2-.57 1.73-.99l2.39.96c.24.12.54.02.68-.22l1.92-3.32a.5.5 0 0 0-.12-.63l-2.03-1.58zM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7z"/>
-    </svg>
-  </button>
-</div>
-
-<!-- Overlay iframe pour configuration -->
-<div id="overlay-config">
-  <div>
-    <iframe id="iframe-config-lennox" src=""></iframe>
-  </div>
 </div>
 
 <!-- Modal d'acquittement -->
@@ -99,31 +86,6 @@ function showTab(idx) {
 }
 window.addEventListener('DOMContentLoaded', function() {
   showTab(document.querySelector('.tab-button.active') ? Array.from(document.querySelectorAll('.tab-button')).findIndex(tab => tab.classList.contains('active')) : 0);
-
-  const btnCfg = document.getElementById('btn-config-lennox');
-  const overlayCfg = document.getElementById('overlay-config');
-  const iframeCfg = document.getElementById('iframe-config-lennox');
-  if (btnCfg && overlayCfg && iframeCfg) {
-    btnCfg.addEventListener('click', function() {
-      iframeCfg.src = 'configurationlennox.php';
-      overlayCfg.style.display = 'flex';
-    });
-    overlayCfg.addEventListener('click', function(e) {
-      if (e.target === overlayCfg) {
-        overlayCfg.style.display = 'none';
-        iframeCfg.src = '';
-      }
-    });
-    // fermer avec echap
-    document.addEventListener('keydown', function(e) {
-      if (e.key === 'Escape') {
-        if (overlayCfg.style.display === 'flex') {
-          overlayCfg.style.display = 'none';
-          iframeCfg.src = '';
-        }
-      }
-    });
-  }
 });
 
 async function getLennoxData(id = 1) {
@@ -202,7 +164,6 @@ function renderLennoxToTab(id, data) {
       source = (window.lennoxTabData && window.lennoxTabData[id]) ? window.lennoxTabData[id] : [];
     }
 
-    // Gestion simplifiée de l'icône : opacité statique, aucune trace de clignotement
     try {
       const btns = document.querySelectorAll('.tab-button');
       const btn = btns[idx];

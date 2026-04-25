@@ -2,6 +2,8 @@
 include "Base.php";
 include "modbus.php";
 
+echo "Lecture Modbus LG ACP5\r\n";   
+
 //chargement des entree modbus
 $result = mssql("SELECT Id,Addresse,Port FROM [dbo].[DefModBus]");
 $defModBusData = [];
@@ -14,15 +16,14 @@ $defModBusData = [];
     $resultUnite = mssql("SELECT * FROM [dbo].[DefUnites] Order By ModbusId");
 while ($row = sqlnext($resultUnite)) 
 {
-        echo chr(10).chr(13)."\n\r";
+        //echo chr(10).chr(13)."\n\r";
 
     $ip = $defModBusData[$row["ModbusId"]]["Addresse"];
     $port = $defModBusData[$row["ModbusId"]]["Port"];
     $unitId = $row["Device"]; 
     $Id=$row["Id"];
 
-    echo "Lire unite ".$Id." Addresse : ".$ip."  port : ".$port." Premiere addresse :" . $row["OnOff"]."  ";
-
+    //echo "Lire unite ".$Id." Addresse : ".$ip."  port : ".$port." Premiere addresse :" . $row["OnOff"]."  ";
 try {
     $ModbusValue = $row["ModbusId"];
     if ($ModbusValue!=$ModBusmemo)
@@ -88,12 +89,14 @@ try {
     $CodeErreur=LireModbus($socket,$unitId,$startAddress,$type);
 
     if ($CodeErreur)
-        echo "   Erreur : ".$CodeErreur;
+        echo "   Erreur (".$Id."): ".$CodeErreur;
     }
 }
 
     else
     {
+        $OnOff=false;
+        /*
         $OnOff=0;
         $Alarm=1;
         $Mode=0;
@@ -101,6 +104,7 @@ try {
         $Room=0;
         $SetRoom=0;
         $CodeErreur=100066;
+        */
     }
     // Efface uniquement si l'Id existe déjà dans ValUnites
 
@@ -112,6 +116,8 @@ if ($OnOff!==false)
         
                 mssql("INSERT INTO [ValUnites] (Id, OnOff, Alarm, Mode, Fan, Room, SetRoom, CodeErreur) VALUES ($Id,$OnOff,$Alarm,$Mode,$Fan,$Room,$SetRoom,$CodeErreur)");            
     } 
+usleep(200);
+
 } 
 
 
@@ -135,6 +141,8 @@ function Defaut()
         $Room=0;
         $SetRoom=0;
         $CodeErreur=100088;
+
+        return 0;
 
         echo "Defaut Unite : ".$Id;
 

@@ -27,18 +27,32 @@ $lastCall = 0;
 $Memocompte=$_COOKIE["compte"];
 $lastCall = (int)$_COOKIE["compteTime"];
 
-    if ($now - $lastCall >= 5) 
+// Charger compteLog depuis le cookie ou le fichier JSON
+$compteLogFile = 'CompteLog.json';
+$compteLogData = json_decode(file_get_contents($compteLogFile), true);
+$Comptelogbase = $compteLogData['compteLog'];
+
+if (isset($_COOKIE["compteLog"])) {
+    $compteLog = (int)$_COOKIE["compteLog"];
+} else {
+    $compteLog = $Comptelogbase;
+    setcookie("compteLog", $compteLog, time() + 30600, "/");
+}
+
+        echo "  Compteur Log:".$compteLog.chr(10).chr(13)."\n\r";
+
+    if ($now - $lastCall >= 10) 
     {
             echo "   ";
-            $Comp = (int)(($now - $lastCall)/5);
+            $Comp = (int)(($now - $lastCall)/15);
             echo $Comp."=".$Memocompte;
             if ($Memocompte != $Comp)
             {
                 // Appel SrvLG.php
-                setcookie("compte", $Comp, time() + 3600, "/"); // Mettre à jour le cookie avec la nouvelle valeur
-                $srvprog_result = @file_get_contents('http://localhost/SrvLG.php');
+                setcookie("compte", $Comp, time() + 30600, "/"); // Mettre à jour le cookie avec la nouvelle valeur
+                $srvprog_result = @file_get_contents('http://localhost/SrvLennox.php'); //debugage en coures defaut cables
                     echo htmlspecialchars($srvprog_result);
-                $srvprog_result = @file_get_contents('http://localhost/SrvLennox.php');
+                $srvprog_result = @file_get_contents('http://localhost/SrvLG.php');
                     echo htmlspecialchars($srvprog_result);
 
             }
@@ -47,10 +61,10 @@ $lastCall = (int)$_COOKIE["compteTime"];
     }
 
 
-    if ($now - $lastCall >= 60) 
+    if ($now - $lastCall >= 59) 
     {
         // Appel SrvProg.php
-        setcookie("compteTime", $now, time() + 3600, "/"); // Mettre à jour le cookie avec le temps actuel
+        setcookie("compteTime", $now, time() + 30600, "/"); // Mettre à jour le cookie avec le temps actuel
         $srvprog_result = @file_get_contents('http://localhost/SrvProg.php');
         echo htmlspecialchars($srvprog_result);
 
@@ -60,9 +74,17 @@ $lastCall = (int)$_COOKIE["compteTime"];
         $srvprog_result = @file_get_contents('http://localhost/SrvSend.php');
         echo htmlspecialchars($srvprog_result);
 
-        $srvprog_result = @file_get_contents('http://localhost/SrvInLog.php');
-        echo htmlspecialchars($srvprog_result);
-    }
+        if ($compteLog-- < 2)
+        {            
+            $compteLog = $Comptelogbase;
+            setcookie("compteLog", $compteLog, time() + 30600, "/");
+            $srvprog_result = @file_get_contents('http://localhost/SrvInLog.php');
+            echo htmlspecialchars($srvprog_result);
+        }     
+    }            
+        // Sauvegarder la nouvelle valeur dans le cookie
+            setcookie("compteLog", $compteLog, time() + 30600, "/");
 
-    sleep(1);
+            var_dump($_COOKIE);
+    sleep(3);
 ?>

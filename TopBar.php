@@ -2,7 +2,7 @@
     <img src="Images/LogoKaDelta.png" alt="Ka Delta Logo" style="height:172px;" />
     <h1>Ka Delta Modbus</h1>
     <div class="TitreGroupe">
-        <button id="btn-page" class="groupe-btn">Page</button>
+        <button id="btn-page" class="groupe-btn">Pages</button>
         <button id="btn-groupe" class="groupe-btn">Groupe</button>
         <button onclick="ClimGroupe()" class="groupe-btn">Action sur<br />groupe</button>
         <button id="btn-programmation" class="groupe-btn">Programmation</button>
@@ -209,7 +209,7 @@
                 const pages= (window.topBarPagesOverride) ? window.topBarPagesOverride : [
                     { id:'units', label:'Unités', root:true },
                     { id:'lennox', label:'Lennox', file:'lennox.php', direct:true },
-                    { id:'info', label:'Informatique', file:'info.php' }
+                    { id:'graphiques', label:'Graphiques', file:'VueGraph.php', direct:true },
                 ];
                 // Ajout de balises prerender pour les pages les plus probables (hors page actuelle)
                 (function addPrerender(){
@@ -234,8 +234,8 @@
                 function detectActive(){
                     const path=location.pathname.toLowerCase();
                     if(path.indexOf('lennox.php')!==-1) return 'lennox';
+                    if(path.indexOf('vuegraph.php')!==-1) return 'graphiques';
                     if(path.indexOf('index.php')!==-1) return 'units';
-                    if(path.indexOf('info.php')!==-1) return 'info';
                     return null;
                 }
                 function styleBtn(b,active){
@@ -249,7 +249,7 @@
                         b.style.transform='none';
                     }
                 }
-                btnPage.addEventListener('click',(e)=>{ overlay.style.display='block'; popup.style.display='block'; let x=e.clientX,y=e.clientY; const r=popup.getBoundingClientRect(); const pad=16; if(x+r.width>innerWidth-pad)x=innerWidth-r.width-pad; if(y+r.height>innerHeight-pad)y=innerHeight-r.height-pad; popup.style.left=x+'px'; popup.style.top=y+'px'; });
+                btnPage.addEventListener('click',(e)=>{ window.scrollTo({top:0,behavior:'smooth'}); overlay.style.display='block'; popup.style.display='block'; let x=e.clientX,y=e.clientY; const r=popup.getBoundingClientRect(); const pad=16; if(x+r.width>innerWidth-pad)x=innerWidth-r.width-pad; if(y+r.height>innerHeight-pad)y=innerHeight-r.height-pad; popup.style.left=x+'px'; popup.style.top=y+'px'; });
                 overlay.addEventListener('click',()=>{ popup.style.display='none'; overlay.style.display='none'; });
                 function showPageTransition(){
                     if(document.getElementById('page-transition-overlay')) return;

@@ -65,7 +65,7 @@ if (isset($lennoxData) && is_array($lennoxData))
 // Enregistrer les valeurs Lennox depuis le fichier JSON de chaque groupes 
     LogLennox(501,'Lennox1.json');
     LogLennox(502,'Lennox2.json');
-    LogLennox(503,'Lennox2.json');
+    LogLennox(503,'Lennox3.json');
 
 
 // Afficher le temps d'exécution total

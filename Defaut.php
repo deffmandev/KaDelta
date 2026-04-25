@@ -44,6 +44,15 @@ if (isset($_POST['acquitte_all'])) {
 }
 // Traitement effacement total (seulement si etat=3)
 if (isset($_POST['delete_all'])) {
+    $dateNow = date("d-m-Y H:i");
+        file_put_contents('defaut_delete_log.txt', $dateNow . PHP_EOL, FILE_APPEND);
+    $sqlbase=mssql("Select * from defauts where etat=3");
+    while ($row = sqlnext($sqlbase)) {
+        $logEntry = sprintf( "Defaut effacé: ID=%d, Date=%s, Heure=%s, Unité=%s, Code=%s, État=%d, Send=%s",
+            $row['Id'], $row['Date'], $row['Heure'], $row['Unite'], $row['Code'], $row['Etat'],$row['Send']
+        );
+        file_put_contents('defaut_delete_log.txt', $logEntry . PHP_EOL, FILE_APPEND);
+    }
     mssql("DELETE FROM defauts WHERE etat=3");
     mssql("DELETE FROM ValUnites");
     header('Location: Defaut.php');

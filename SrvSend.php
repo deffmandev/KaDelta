@@ -152,7 +152,7 @@ $payload = [
     'from' => 'kadelta@timaim.kadelta.fr',
     'from_name' => 'Ka Delta',
     'to' => $destinataire,
-    'subject' => 'Test API envoi',
+    'subject' => 'DEFAUT COVIDIEN-MEDTRONIC',
     'body' => $message,
     'is_html' => true,
 ];

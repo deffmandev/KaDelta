@@ -8,7 +8,7 @@ function erreurbus($message)
     //exit(0);
 }
 
-function connectModbusTcp($ip, $port = 502, $timeout = 1) 
+function connectModbusTcp($ip, $port = 502, $timeout = 3) 
 {
     $socket = @fsockopen($ip, $port, $errno, $errstr, $timeout);
     if (!$socket) {
@@ -30,7 +30,7 @@ function CloseModbusTcp($socket)
     }
 }
 
-function safe_fwrite($socket, $data, $timeout = 1) {
+function safe_fwrite($socket, $data, $timeout = 3) {
     if (!$socket) return false;
     stream_set_timeout($socket, $timeout);
     $result = @fwrite($socket, $data);
@@ -41,7 +41,7 @@ function safe_fwrite($socket, $data, $timeout = 1) {
     }
     return $result;
 }
-function safe_fread($socket, $length, $timeout = 1) {
+function safe_fread($socket, $length, $timeout = 3) {
     if (!$socket) return false;
     stream_set_timeout($socket, $timeout);
     $data = @fread($socket, $length);

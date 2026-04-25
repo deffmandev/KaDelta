@@ -2,10 +2,12 @@
 
 $serverName = "localhost,1433";
 $connectionOptions = [
-    "Database" => "KaLog",
-    "Uid" => "BaseKa",
-    "PWD" => "deffdeff",
-    "CharacterSet" => "UTF-8",
+    "Database"                  => "KaLog",
+    "Uid"                       => "BaseKa",
+    "PWD"                       => "deffdeff",
+    "CharacterSet"              => "UTF-8",
+    "ConnectionPooling"         => true,
+    "MultipleActiveResultSets"  => false,
 ];
 
 

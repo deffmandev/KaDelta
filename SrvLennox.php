@@ -2,12 +2,35 @@
 include 'base.php';
 include 'modbus.php';
 
-echo "\n\rLecture Modbus LENNOX \n\r";
+echo "\n\rLecture Modbus LENNOX\r\n";
+
+$timeoutFile = __DIR__ . '/LennoxTo.json';
+
+function lireTimeoutLennox($timeoutFile)
+{
+    if (!file_exists($timeoutFile)) {
+        return array();
+    }
+
+    $contenu = file_get_contents($timeoutFile);
+    $donnees = json_decode($contenu, true);
+
+    return is_array($donnees) ? $donnees : array();
+}
+
+function ecrireTimeoutLennox($timeoutFile, array $donnees)
+{
+    file_put_contents($timeoutFile, json_encode($donnees, JSON_PRETTY_PRINT));
+}
+
 
 // Fonction pour lire les registres Modbus 0 à 200
 function lireRegistresModbus($socket, $unitId = 1) 
 {
-    $Registre10a100 = readModbusRegisters($socket, $unitId, 0, 100);
+    global $timeoutFile;
+
+    $Registre10a100 = readModbusRegisters($socket, $unitId, 0,50);
+    
     if ($Registre10a100 === false) 
     {
         echo("Erreur: Impossible de lire les registres Modbus $unitId \r\n");
@@ -16,15 +39,40 @@ function lireRegistresModbus($socket, $unitId = 1)
 
     if ($Registre10a100)
     {
-        $Registre1101a200 = readModbusRegisters($socket, $unitId, 100, 100);
+        $Registre1101a200 = readModbusRegisters($socket, $unitId, 50, 50);
             if ($Registre1101a200 === false) {
-                                            echo("Erreur: Impossible de lire les registres Modbus $unitId \r\n");
+                                            echo("Erreur: Impossible de lire les registres Modbus 2é $unitId \r\n");
                                             return array_fill(0, 200, 10080); // Retourner un tableau vide en cas d'erreur
                                             }
+    }
 
-    return array_merge($Registre10a100, $Registre1101a200);
+    if ($Registre10a100)
+    {
+        $Reg3 = readModbusRegisters($socket, $unitId, 100, 50);
+            if ($Reg3 === false) {
+                                            echo("Erreur: Impossible de lire les registres Modbus 3é $unitId \r\n");
+                                            return array_fill(0, 200, 10080); // Retourner un tableau vide en cas d'erreur
+                                            }
+    }
+
+    if ($Registre10a100)
+    {
+        $Reg4 = readModbusRegisters($socket, $unitId, 150, 50);
+            if ($Reg4 === false) {
+                                            echo("Erreur: Impossible de lire les registres Modbus 4é $unitId \r\n");
+                                            return array_fill(0, 200, 10080); // Retourner un tableau vide en cas d'erreur
+                                            }
+    }
+
+    $timeouts = lireTimeoutLennox($timeoutFile);
+    $timeouts['TO' . $unitId] = 15;
+    ecrireTimeoutLennox($timeoutFile, $timeouts);
+
+    return array_merge($Registre10a100, $Registre1101a200,$Reg3,$Reg4);
 }
-}
+
+
+
 
 date_default_timezone_set('Europe/Paris');
 $config = json_decode(file_get_contents(__DIR__ . '/configurationlennox.json'), true);//lire la configuration Pour Lennox
@@ -67,62 +115,63 @@ if (!$socket) {
 }   
 
 //Lecture des registres modbus
-
-$Registre1 = lireRegistresModbus($socket, $config['device1']);
-echo "\r\n  --- Lennox 1 terminer \r\n";
 $Registre2 = lireRegistresModbus($socket, $config['device2']);
 echo "  --- Lennox 2 terminer \r\n";
+sleep(2);
 $Registre3 = lireRegistresModbus($socket, $config['device3']);
 echo "  --- Lennox 3 terminer \r\n";
-
+sleep(2);
+$Registre1 = lireRegistresModbus($socket, $config['device1']);
+echo "  --- Lennox 1 terminer \r\n";
+sleep(2);
+ 
 //Fermeture de la connexion modbus
 if ($socket) CloseModbusTcp($socket);    
 
-
-
-// Valeur en provision des donnes pour simule la lectures MODBUS des unites interieurs
-if ($config['modbus']==26)
-{
-$Registre1[15]= date("H");
-$Registre1[16] = date("i");
-$Registre1[17] = date("d");
-$Registre1[18] = date("m");
-$Registre1[19] = date("Y");
-$Registre3[36] = 14;//code defaut lennox
-$Registre1[2] = 215;
-$Registre2[2] = 228;
-$Registre1[3] = 195;
-$Registre1[37] = 232;
-$Registre1[38] = 211;
-$Registre1[39] = 128;
-$Registre1[40] = 213;
-$Registre1[135] = 1;
-$Registre1[137] = 1;
-$Registre1[140] = 0;
-$Registre1[45] = 79;
-$Registre1[139] = 0;
-$Registre1[142] = 1;
-$Registre1[47]=688;
-}
-
-
 // Sauvegarde des fichiers JSON pour chaque unité
-file_put_contents(__DIR__ . '/Lennox1.json', json_encode($Registre1, JSON_PRETTY_PRINT));
-file_put_contents(__DIR__ . '/Lennox2.json', json_encode($Registre2, JSON_PRETTY_PRINT));
-file_put_contents(__DIR__ . '/Lennox3.json', json_encode($Registre3, JSON_PRETTY_PRINT));
+if ($Registre1[36]!="10080")
+    file_put_contents(__DIR__ . '/Lennox1.json', json_encode($Registre1, JSON_PRETTY_PRINT));
+if ($Registre2[36]!="10080")
+    file_put_contents(__DIR__ . '/Lennox2.json', json_encode($Registre2, JSON_PRETTY_PRINT));
+if ($Registre3[36]!="10080")
+    file_put_contents(__DIR__ . '/Lennox3.json', json_encode($Registre3, JSON_PRETTY_PRINT));
 
 // Gestion des défauts Lennox
-gererDefautLennox($Registre1, 501);
-gererDefautLennox($Registre2, 502);
-gererDefautLennox($Registre3, 503);
+        gererDefautLennox($Registre1, 501,1);
+        gererDefautLennox($Registre2, 502,2);
+        gererDefautLennox($Registre3, 503,3);
 
 
 // Fonction pour exécuter une requête SQL et retourner le résultat
-function gererDefautLennox($Registre, $IdD)
+function gererDefautLennox($Registre, $IdD,$device)
 {
     $defautcode = $Registre[36];
+    
+    global $timeoutFile;
+
+    $timeoutName = 'TO' . $device;
+    $timeouts = lireTimeoutLennox($timeoutFile);
+    $timeoutCounter = isset($timeouts[$timeoutName]) ? (int)$timeouts[$timeoutName] : 10;
+
+    if ($defautcode == 10080) 
+        {
+        $timeoutCounter = max(0, $timeoutCounter - 1);
+        $timeouts[$timeoutName] = $timeoutCounter;
+        ecrireTimeoutLennox($timeoutFile, $timeouts);
+
+        if ($timeoutCounter > 1) 
+        {
+            echo "\r\nErreur Lennox timeout $IdD : $defautcode Timeout : $timeoutCounter\r\n";
+            return;
+        }
+        }
+
+        file_put_contents(__DIR__ . '/Lennox'.$device.'.json', json_encode($Registre, JSON_PRETTY_PRINT));
+    
+      if ($defautcode) echo "\r\nErreur Lennox timeout $IdD : $defautcode Timeout : $timeoutCounter\r\n";
+
     $date = date("Y-m-d");
-    $heure = date("H:i:s");
+    $heure = date("H:i");
 
     // Gestion des defaut, Lennox, envoie dans la base de donnes SQL defauts
     if ($defautcode != 0) {
