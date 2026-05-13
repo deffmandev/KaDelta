@@ -35,10 +35,14 @@ date_default_timezone_set('Europe/Paris');
 
 function LogIn($device, $point, $valeur)
 {
-    $date = (string)date("d-m-Y");
-    $heure = (string)date("H:i");
-    $sql="INSERT INTO Log (Date, Heure, Device, Point, Valeur) values ('".$date."','".$heure."','".$device."','".$point."','".$valeur."')";
-    mssqllog($sql);
+    $date  = (string) date('d-m-Y');
+    $heure = (string) date('H:i');
+    // DateNV = meme valeur que Date : permet l'index seek sur IX_Log_Device_Point_DateNV
+    $sql    = 'INSERT INTO Log (Date, Heure, Device, Point, Valeur, DateNV) VALUES (?, ?, ?, ?, ?, ?)';
+    $params = [$date, $heure, (string)$device, (string)$point, (string)$valeur, $date];
+    global $connLog;
+    $stmt = sqlsrv_query($connLog, $sql, $params);
+    if ($stmt !== false) { sqlsrv_free_stmt($stmt); }
 }
 
 

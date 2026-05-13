@@ -1373,6 +1373,20 @@ require "TopBar.php";
     cursor: grabbing;
 }
 
+.vg-bg-progress {
+    height: 4px;
+    margin-top: 10px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, rgba(73, 163, 255, 0.15) 0%, #49a3ff 50%, rgba(73, 163, 255, 0.15) 100%);
+    background-size: 300% 100%;
+    animation: vg-bg-slide 1.4s linear infinite;
+}
+
+@keyframes vg-bg-slide {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
 .vg-hidden {
     display: none;
 }
@@ -2402,7 +2416,7 @@ renderConfigList();
             </div>
         </div>
 
-        <div id="vgStatusBox" class="vg-status"><span id="vgStatusText">Analyse de la configuration...</span></div>
+        <div id="vgStatusBox" class="vg-status"><span id="vgStatusText">Analyse de la configuration...</span><div id="vgBgProgress" class="vg-bg-progress vg-hidden"></div></div>
     </section>
 
     <section class="vg-card vg-hidden" id="vgAnalogPanel">
@@ -2986,6 +3000,16 @@ function hideLoadingOverlay() {
     if (overlay) { overlay.classList.remove('active'); }
 }
 
+function showBgProgress() {
+    const el = document.getElementById('vgBgProgress');
+    if (el) { el.classList.remove('vg-hidden'); }
+}
+
+function hideBgProgress() {
+    const el = document.getElementById('vgBgProgress');
+    if (el) { el.classList.add('vg-hidden'); }
+}
+
 function formatDateForInput(dateString) {
     const dateParts = String(dateString).split('-');
 
@@ -3040,8 +3064,13 @@ function buildApiUrl(device, point) {
     return graphContext.apiBaseUrl + '?device=' + encodeURIComponent(device) + '&point=' + encodeURIComponent(point) + '&date=' + encodeURIComponent(graphContext.date);
 }
 
-function buildBatchApiUrl(device, points) {
-    return graphContext.apiBaseUrl + '?batch=1&device=' + encodeURIComponent(device) + '&points=' + encodeURIComponent(points.join(',')) + '&date=' + encodeURIComponent(graphContext.date);
+function buildBatchApiUrl(device, points, step, top, endpoints, heure) {
+    var url = graphContext.apiBaseUrl + '?batch=1&device=' + encodeURIComponent(device) + '&points=' + encodeURIComponent(points.join(',')) + '&date=' + encodeURIComponent(graphContext.date);
+    if (step && step > 1)   { url += '&step='      + encodeURIComponent(step); }
+    if (top  && top  > 0)   { url += '&top='       + encodeURIComponent(top);  }
+    if (endpoints)          { url += '&endpoints=1'; }
+    if (heure)              { url += '&heure='     + encodeURIComponent(heure); }
+    return url;
 }
 
 function fetchJsonArray(url) {
@@ -3198,9 +3227,9 @@ function normalizeAnalogSeries(indexes, values, series) {
     const labels = indexes.slice(0, size).map((value) => String(value));
     const points = values.slice(0, size).map((value) => {
         const numericValue = toNumericValueOrNull(value);
-
+        // null => gap Chart.js (apercu progressif peut avoir des trous)
         if (numericValue === null) {
-            return Number.NaN;
+            return null;
         }
 
         return numericValue * series.multiplier;
@@ -3208,10 +3237,6 @@ function normalizeAnalogSeries(indexes, values, series) {
 
     if (size === 0) {
         throw new Error('Aucun point exploitable renvoye par l\'API pour ' + series.label + '.');
-    }
-
-    if (points.some((value) => Number.isNaN(value))) {
-        throw new Error('Certaines valeurs de ' + series.label + ' ne sont pas numeriques.');
     }
 
     const filteredSeries = applyAnalogFilters(points, series);
@@ -3230,10 +3255,6 @@ function normalizeOnOffSeries(indexes, values, series) {
 
     if (size === 0) {
         throw new Error('Aucun point exploitable renvoye par l\'API pour ' + series.label + '.');
-    }
-
-    if (points.some((value) => Number.isNaN(value))) {
-        throw new Error('Certaines valeurs de ' + series.label + ' ne sont pas exploitables en ON/OFF.');
     }
 
     return { labels, points };
@@ -3911,6 +3932,266 @@ function buildRequestPlan(seriesList) {
     };
 }
 
+async function fetchBatchData(seriesList, step, top, endpoints, heure) {
+    const devicePointsMap = {};
+    seriesList.forEach((series) => {
+        const key = String(series.device);
+        if (!devicePointsMap[key]) { devicePointsMap[key] = new Set(); }
+        devicePointsMap[key].add(-1);
+        devicePointsMap[key].add(series.point);
+    });
+    const deviceKeys = Object.keys(devicePointsMap);
+    const dataByDevice = {};
+    for (const device of deviceKeys) {
+        const points = Array.from(devicePointsMap[device]);
+        const url = buildBatchApiUrl(device, points, step, top || 0, endpoints || false, heure || '');
+        const data = await fetchJsonObject(url);
+        dataByDevice[device] = data;
+    }
+    return dataByDevice;
+}
+
+// ── Helpers chargement progressif ────────────────────────────────────────────────────
+
+function heureToMinutes(h) {
+    const parts = String(h).split(':');
+    return parseInt(parts[0], 10) * 60 + parseInt(parts[1] || '0', 10);
+}
+
+function minutesToHeure(m) {
+    const hh = String(Math.floor(m / 60)).padStart(2, '0');
+    const mm = String(m % 60).padStart(2, '0');
+    return hh + ':' + mm;
+}
+
+// Extrait la plage horaire (first, last) depuis les donnees endpoints
+// dataByDevice[device]['-1'] est un tableau de strings "HH:MM"
+function extractTimeRange(endpointsData, seriesList) {
+    for (const series of seriesList) {
+        const rows = endpointsData[String(series.device)]?.['-1'];
+        if (Array.isArray(rows) && rows.length >= 2) {
+            return { first: rows[0], last: rows[rows.length - 1] };
+        }
+    }
+    return null;
+}
+
+// ── Dictionnaire de l'apercu progressif ───────────────────────────────────
+// Structure : previewMap[device][heure][pt] = valeur (string)
+// Heure est la cle => pas d'alignement positionnel a gerer
+// Ajout d'une valeur : previewMap[device][heure][pt] = val
+// Conversion pour applyDataToCharts : previewMapToDataByDevice()
+
+function previewAddData(previewMap, apiData) {
+    // apiData : { device: { '-1': [heure,...], pt: [valeur,...] } }
+    for (const device of Object.keys(apiData)) {
+        if (!previewMap[device]) { previewMap[device] = {}; }
+        const heures = apiData[device]['-1'];
+        if (!Array.isArray(heures)) { continue; }
+        for (const [pt, values] of Object.entries(apiData[device])) {
+            if (pt === '-1') { continue; }
+            if (!Array.isArray(values)) { continue; }
+            for (let i = 0; i < values.length && i < heures.length; i++) {
+                const h = heures[i];
+                if (!previewMap[device][h]) { previewMap[device][h] = {}; }
+                previewMap[device][h][pt] = values[i];
+            }
+        }
+    }
+}
+
+function previewMapToDataByDevice(previewMap) {
+    // Reconstruit { device: { '-1': [heures triees], pt: [valeurs alignees] } }
+    const dataByDevice = {};
+    for (const device of Object.keys(previewMap)) {
+        const sortedHeures = Object.keys(previewMap[device]).sort();
+        dataByDevice[device] = { '-1': sortedHeures };
+        for (const h of sortedHeures) {
+            for (const [pt, val] of Object.entries(previewMap[device][h])) {
+                if (!dataByDevice[device][pt]) { dataByDevice[device][pt] = []; }
+                dataByDevice[device][pt].push(val);
+            }
+        }
+        // Aligner toutes les series a la meme longueur (null pour les trous)
+        const size = sortedHeures.length;
+        for (const pt of Object.keys(dataByDevice[device])) {
+            if (pt === '-1') { continue; }
+            while (dataByDevice[device][pt].length < size) {
+                dataByDevice[device][pt].push(null);
+            }
+        }
+    }
+    return dataByDevice;
+}
+
+// Requetes paralleles par serie : 1 request par (device, point) au lieu de 1 gros batch
+// Avantage : chaque PHP process fetche ~24 lignes (preview) ou ~720 lignes (full)
+//            au lieu de N*720 lignes en sequentiel => wall-clock divise par ~N
+async function fetchBatchDataParallel(seriesList, step) {
+    const requests = seriesList.map((series) => {
+        const device = String(series.device);
+        // Chaque requete inclut -1 (index Heure) + le point de la serie
+        const url = buildBatchApiUrl(device, [-1, series.point], step);
+        return fetchJsonObject(url).then((data) => ({ device, point: String(series.point), data }));
+    });
+    const results = await Promise.all(requests);
+    // Fusionner dans le format dataByDevice attendu par applyDataToCharts
+    const dataByDevice = {};
+    results.forEach(({ device, point, data }) => {
+        if (!dataByDevice[device]) { dataByDevice[device] = {}; }
+        // Index (-1) : prendre le premier resultat disponible pour ce device
+        if (!dataByDevice[device]['-1'] && Array.isArray(data['-1']) && data['-1'].length > 0) {
+            dataByDevice[device]['-1'] = data['-1'];
+        }
+        if (Array.isArray(data[point])) {
+            dataByDevice[device][point] = data[point];
+        }
+    });
+    return dataByDevice;
+}
+
+// Mise a jour directe des graphiques depuis le previewMap
+// Lit previewMap[device][heure][pt], pas d'alignement positionnel a gerer
+// Index X = heures triees du tableau, valeur = previewMap[device][heure][pt] * multiplier
+function applyPreviewToCharts(previewMap, seriesList) {
+    const firstDevice = String(seriesList[0].device || graphContext.defaultDevice);
+    const sortedHeures = Object.keys(previewMap[firstDevice] || {}).sort();
+    if (sortedHeures.length === 0) { return; }
+
+    // Bati les donnees pour chaque serie a partir du tableau
+    function buildSeriesData(series) {
+        const device = String(series.device);
+        const pt     = String(series.point);
+        return sortedHeures.map((h) => {
+            const raw = (previewMap[device]?.[h]?.[pt]);
+            if (raw === undefined || raw === null) { return null; }
+            const num = parseFloat(String(raw).replace(',', '.'));
+            return Number.isFinite(num) ? num * series.multiplier : null;
+        });
+    }
+
+    function buildOnOffData(series) {
+        const device = String(series.device);
+        const pt     = String(series.point);
+        return sortedHeures.map((h) => {
+            const raw = previewMap[device]?.[h]?.[pt];
+            return raw !== undefined && raw !== null ? parseOnOffValue(raw) : null;
+        });
+    }
+
+    // Supprime les bornes de zoom fixes pour que Chart.js affiche tous les labels
+    function clearZoomBounds(chartInstance) {
+        if (chartInstance && chartInstance.options.scales && chartInstance.options.scales.x) {
+            delete chartInstance.options.scales.x.min;
+            delete chartInstance.options.scales.x.max;
+        }
+    }
+
+    if (analogChart && analogSeriesConfig.length) {
+        analogChart.data.labels = sortedHeures.slice();
+        analogSeriesConfig.forEach((series, i) => {
+            const pts = buildSeriesData(series);
+            analogChart.data.datasets[i].data = pts;
+            analogSeriesConfig[i].lastValue = findLastDefinedValue(pts);
+        });
+        clearZoomBounds(analogChart);
+        analogChart.update('none');
+    }
+
+    if (pressureChart && pressureSeriesConfig.length) {
+        pressureChart.data.labels = sortedHeures.slice();
+        pressureSeriesConfig.forEach((series, i) => {
+            const pts = buildSeriesData(series);
+            pressureChart.data.datasets[i].data = pts;
+            pressureSeriesConfig[i].lastValue = findLastDefinedValue(pts);
+        });
+        clearZoomBounds(pressureChart);
+        pressureChart.update('none');
+    }
+
+    if (onOffChart && onOffSeriesConfig.length) {
+        onOffChart.data.labels = sortedHeures.slice();
+        onOffSeriesConfig.forEach((series, i) => {
+            const rawStates = buildOnOffData(series);
+            onOffChart.data.datasets[i].rawStates = rawStates;
+            onOffChart.data.datasets[i].data = rawStates.map((v, idx) => getOnOffDisplayValue(i, v));
+            onOffSeriesConfig[i].lastValue = rawStates[rawStates.length - 1];
+        });
+        clearZoomBounds(onOffChart);
+        onOffChart.update();
+    }
+
+    redrawSyncedCharts();
+}
+
+function applyDataToCharts(dataByDevice, seriesList, resetZoom) {
+    const firstDevice = String(seriesList[0].device || graphContext.defaultDevice);
+    const indexes = Array.isArray((dataByDevice[firstDevice] || {})['-1'])
+        ? dataByDevice[firstDevice]['-1']
+        : [];
+
+    const normalizedAnalogSeries = analogSeriesConfig.map((series) => {
+        const nextSeries = copyGraphObject(series);
+        const values = ((dataByDevice[String(series.device)] || {})[String(series.point)]) || [];
+        nextSeries.normalized = normalizeAnalogSeries(indexes, values, series);
+        return nextSeries;
+    });
+    const normalizedPressureSeries = pressureSeriesConfig.map((series) => {
+        const nextSeries = copyGraphObject(series);
+        const values = ((dataByDevice[String(series.device)] || {})[String(series.point)]) || [];
+        nextSeries.normalized = normalizeAnalogSeries(indexes, values, series);
+        return nextSeries;
+    });
+    const normalizedOnOffSeries = onOffSeriesConfig.map((series) => {
+        const nextSeries = copyGraphObject(series);
+        const values = ((dataByDevice[String(series.device)] || {})[String(series.point)]) || [];
+        nextSeries.normalized = normalizeOnOffSeries(indexes, values, series);
+        return nextSeries;
+    });
+
+    let finalSize = indexes.length;
+    normalizedAnalogSeries.forEach((series) => { finalSize = Math.min(finalSize, series.normalized.points.length); });
+    normalizedPressureSeries.forEach((series) => { finalSize = Math.min(finalSize, series.normalized.points.length); });
+    normalizedOnOffSeries.forEach((series) => { finalSize = Math.min(finalSize, series.normalized.points.length); });
+
+    if (finalSize === 0) {
+        throw new Error('Aucun point commun exploitable entre les series configurees.');
+    }
+
+    if (analogChart) {
+        analogChart.data.labels = normalizedAnalogSeries[0].normalized.labels.slice(0, finalSize);
+        normalizedAnalogSeries.forEach((series, datasetIndex) => {
+            analogChart.data.datasets[datasetIndex].data = series.normalized.points.slice(0, finalSize);
+            analogSeriesConfig[datasetIndex].lastValue = findLastDefinedValue(series.normalized.points.slice(0, finalSize));
+        });
+        analogChart.update('none');
+    }
+
+    if (pressureChart) {
+        pressureChart.data.labels = normalizedPressureSeries[0].normalized.labels.slice(0, finalSize);
+        normalizedPressureSeries.forEach((series, datasetIndex) => {
+            pressureChart.data.datasets[datasetIndex].data = series.normalized.points.slice(0, finalSize);
+            pressureSeriesConfig[datasetIndex].lastValue = findLastDefinedValue(series.normalized.points.slice(0, finalSize));
+        });
+        pressureChart.update('none');
+    }
+
+    if (onOffChart) {
+        onOffChart.data.labels = normalizedOnOffSeries[0].normalized.labels.slice(0, finalSize);
+        normalizedOnOffSeries.forEach((series, datasetIndex) => {
+            const rawStates = series.normalized.points.slice(0, finalSize);
+            onOffChart.data.datasets[datasetIndex].rawStates = rawStates;
+            onOffChart.data.datasets[datasetIndex].data = rawStates.map((value) => getOnOffDisplayValue(datasetIndex, value));
+            onOffSeriesConfig[datasetIndex].lastValue = rawStates[finalSize - 1];
+        });
+        onOffChart.update();
+    }
+
+    if (resetZoom) { resetAllZoom(); }
+
+    return { normalizedAnalogSeries, normalizedPressureSeries, normalizedOnOffSeries, finalSize, indexes };
+}
+
 async function loadCurve(resetZoomOnSuccess) {
     const seriesList = analogSeriesConfig.concat(pressureSeriesConfig).concat(onOffSeriesConfig);
 
@@ -3921,137 +4202,103 @@ async function loadCurve(resetZoomOnSuccess) {
 
     reloadButton.disabled = true;
     showLoadingOverlay();
-    setStatus('Chargement des series configurees...', false);
+    setStatus('Chargement de l\'apercu...', false);
 
     try {
-        // Grouper les series par device et collecter les points uniques
-        const devicePointsMap = {};
-        seriesList.forEach((series) => {
-            const key = String(series.device);
-            if (!devicePointsMap[key]) { devicePointsMap[key] = new Set(); }
-            devicePointsMap[key].add(-1);
-            devicePointsMap[key].add(series.point);
-        });
+        // ── Phase 0 : endpoints => graphique visible instantanement ─────────────────
+        // 1 appel : CROSS APPLY first+last => 2 pts/serie => ~20ms
+        const endpointsData = await fetchBatchData(seriesList, 1, 0, true);
+        applyDataToCharts(endpointsData, seriesList, resetZoomOnSuccess !== false);
+        hideLoadingOverlay();
+        showBgProgress();
+        setStatus('Apercu initial (debut + fin de journee)...', false);
 
-        const deviceKeys = Object.keys(devicePointsMap);
+        // ── Full load demarre maintenant en fond (concurrent avec la boucle apercu) ─
+        // IIS peut traiter la longue requete full ET les courtes requetes heure en parallele
+        let fullDone = false;
+        const fullLoadPromise = fetchBatchData(seriesList, 1, 0, false);
+        fullLoadPromise.then(() => { fullDone = true; }).catch(() => { fullDone = true; });
 
-        // Un seul appel HTTP par device (au lieu de N+1)
-        const batchResults = await Promise.all(
-            deviceKeys.map((device) => {
-                const points = Array.from(devicePointsMap[device]);
-                const url = buildBatchApiUrl(device, points);
-                return fetchJsonObject(url).then((data) => ({ device, data }));
-            })
-        );
+        // ── Boucle apercu progressif : 1 point par appel, toutes les 60 min ────────
+        // Chaque appel : CROSS APPLY TOP 1 WHERE Heure >= cible => ~50ms (1 ligne/serie)
+        // previewMap[device][heure][pt] = valeur => pas d'alignement positionnel a gerer
+        const timeRange = extractTimeRange(endpointsData, seriesList);
+        if (timeRange) {
+            // Initialise le dictionnaire avec les endpoints deja affiches
+            const previewMap = {};
+            previewAddData(previewMap, endpointsData);
 
-        const dataByDevice = {};
-        batchResults.forEach(({ device, data }) => { dataByDevice[device] = data; });
+            // Debug : affiche l'etat initial du tableau dans la console
+            console.log('[Apercu] Etat initial previewMap (endpoints) :');
+            const dbgInitial = {};
+            for (const device of Object.keys(previewMap)) {
+                for (const heure of Object.keys(previewMap[device]).sort()) {
+                    dbgInitial[heure] = previewMap[device][heure];
+                }
+            }
+            console.table(dbgInitial);
 
-        const firstDevice = String(seriesList[0].device || graphContext.defaultDevice);
-        const indexes = Array.isArray((dataByDevice[firstDevice] || {})['-1'])
-            ? dataByDevice[firstDevice]['-1']
-            : [];
+            const lastMin = heureToMinutes(timeRange.last);
+            let   nextMin = heureToMinutes(timeRange.first) + 60; // premier point : t_first + 1h
 
-        const normalizedAnalogSeries = analogSeriesConfig.map((series) => {
-            const nextSeries = copyGraphObject(series);
-            const values = ((dataByDevice[String(series.device)] || {})[String(series.point)]) || [];
-            nextSeries.normalized = normalizeAnalogSeries(indexes, values, series);
-            return nextSeries;
-        });
-        const normalizedPressureSeries = pressureSeriesConfig.map((series) => {
-            const nextSeries = copyGraphObject(series);
-            const values = ((dataByDevice[String(series.device)] || {})[String(series.point)]) || [];
-            nextSeries.normalized = normalizeAnalogSeries(indexes, values, series);
-            return nextSeries;
-        });
-        const normalizedOnOffSeries = onOffSeriesConfig.map((series) => {
-            const nextSeries = copyGraphObject(series);
-            const values = ((dataByDevice[String(series.device)] || {})[String(series.point)]) || [];
-            nextSeries.normalized = normalizeOnOffSeries(indexes, values, series);
-            return nextSeries;
-        });
-
-        let finalSize = indexes.length;
-
-        normalizedAnalogSeries.forEach((series) => {
-            finalSize = Math.min(finalSize, series.normalized.points.length);
-        });
-        normalizedPressureSeries.forEach((series) => {
-            finalSize = Math.min(finalSize, series.normalized.points.length);
-        });
-        normalizedOnOffSeries.forEach((series) => {
-            finalSize = Math.min(finalSize, series.normalized.points.length);
-        });
-
-        if (finalSize === 0) {
-            throw new Error('Aucun point commun exploitable entre les series configurees.');
+            while (nextMin < lastMin && !fullDone) {
+                const heure = minutesToHeure(nextMin);
+                const pointData = await fetchBatchData(seriesList, 1, 0, false, heure);
+                if (fullDone) { break; } // full load arrive pendant cet appel => inutile de continuer
+                previewAddData(previewMap, pointData);
+                try {
+                    applyPreviewToCharts(previewMap, seriesList);
+                    // Debug : affiche le tableau apres chaque nouvelle valeur
+                    console.log('[Apercu] Apres ajout ' + heure + ' :');
+                    const dbg = {};
+                    for (const device of Object.keys(previewMap)) {
+                        for (const h of Object.keys(previewMap[device]).sort()) {
+                            dbg[h] = previewMap[device][h];
+                        }
+                    }
+                    console.table(dbg);
+                    setStatus('Apercu ' + heure + '...', false);
+                    // Cede le controle au navigateur pour qu'il peigne le graphique
+                    await new Promise((resolve) => requestAnimationFrame(resolve));
+                } catch (_e) {
+                    console.warn('[Apercu] applyPreviewToCharts echoue a ' + heure + ' :', _e);
+                }
+                nextMin += 60;
+            }
         }
 
-        if (analogChart) {
-            analogChart.data.labels = normalizedAnalogSeries[0].normalized.labels.slice(0, finalSize);
-            normalizedAnalogSeries.forEach((series, datasetIndex) => {
-                analogChart.data.datasets[datasetIndex].data = series.normalized.points.slice(0, finalSize);
-                analogSeriesConfig[datasetIndex].lastValue = findLastDefinedValue(series.normalized.points.slice(0, finalSize));
-            });
-            analogChart.update('none');
-        }
-
-        if (pressureChart) {
-            pressureChart.data.labels = normalizedPressureSeries[0].normalized.labels.slice(0, finalSize);
-            normalizedPressureSeries.forEach((series, datasetIndex) => {
-                pressureChart.data.datasets[datasetIndex].data = series.normalized.points.slice(0, finalSize);
-                pressureSeriesConfig[datasetIndex].lastValue = findLastDefinedValue(series.normalized.points.slice(0, finalSize));
-            });
-            pressureChart.update('none');
-        }
-
-        if (onOffChart) {
-            onOffChart.data.labels = normalizedOnOffSeries[0].normalized.labels.slice(0, finalSize);
-            normalizedOnOffSeries.forEach((series, datasetIndex) => {
-                const rawStates = series.normalized.points.slice(0, finalSize);
-
-                onOffChart.data.datasets[datasetIndex].rawStates = rawStates;
-                onOffChart.data.datasets[datasetIndex].data = rawStates.map((value) => getOnOffDisplayValue(datasetIndex, value));
-                onOffSeriesConfig[datasetIndex].lastValue = rawStates[finalSize - 1];
-            });
-            onOffChart.update();
-        }
-
-        if (resetZoomOnSuccess) {
-            resetAllZoom();
-        }
+        // ── Phase finale : attendre les donnees completes (deja en cours) ──────────
+        const fullData = await fullLoadPromise;
+        hideBgProgress();
+        const fullResult = applyDataToCharts(fullData, seriesList, true);
 
         const detailParts = [];
-
-        normalizedAnalogSeries.forEach((series) => {
-            if (indexes.length !== series.normalized.points.length) {
+        fullResult.normalizedAnalogSeries.forEach((series) => {
+            if (fullResult.indexes.length !== series.normalized.points.length) {
                 detailParts.push(series.label + ' tronquee aux index');
             }
-
             if (series.normalized.filteredCount > 0) {
                 detailParts.push(series.label + ' filtres appliques: ' + series.normalized.filteredCount + ' point(s)');
             }
-
             if (Array.isArray(series.filterWarnings) && series.filterWarnings.length > 0) {
                 detailParts.push(series.label + ' filtres ignores: ' + series.filterWarnings.join(', '));
             }
         });
-        normalizedPressureSeries.forEach((series) => {
-            if (indexes.length !== series.normalized.points.length) {
+        fullResult.normalizedPressureSeries.forEach((series) => {
+            if (fullResult.indexes.length !== series.normalized.points.length) {
                 detailParts.push(series.label + ' tronquee aux index');
             }
         });
-        normalizedOnOffSeries.forEach((series) => {
-            if (indexes.length !== series.normalized.points.length) {
+        fullResult.normalizedOnOffSeries.forEach((series) => {
+            if (fullResult.indexes.length !== series.normalized.points.length) {
                 detailParts.push(series.label + ' tronquee aux index');
             }
         });
-        if (detailParts.length === 0) {
-            detailParts.push('aucun ajustement de longueur');
-        }
+        if (detailParts.length === 0) { detailParts.push('aucun ajustement'); }
 
-        setStatus('Donnees chargees avec succes depuis ' + String(seriesList.length + 1) + ' endpoints. Ajustements: ' + detailParts.join(', ') + '.', false);
+        setStatus('Donnees completes chargees (' + fullResult.finalSize + ' pts). ' + detailParts.join(', ') + '.', false);
     } catch (error) {
+        hideBgProgress();
         setStatus('Echec du chargement: ' + (error instanceof Error ? error.message : 'Erreur inconnue'), true);
     } finally {
         reloadButton.disabled = false;
