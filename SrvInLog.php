@@ -22,16 +22,22 @@ include "BaseLog.php";
 // Enregistrer les valeurs des unités dans la table de log de chaque unites 
 $Sql="SELECT * FROM ValUnites";
 $Res=mssql($Sql);
+$numbres=0;
 if ($Res) {
     while ($Row=sqlnext($Res)) {
         if ($Row === null) break;
 
         $Id = (int)$Row['Id'];
-
+        $numbres++;
         for ($i = 1; $i <= 7; $i++)
             LogIn($Id,$i, $Row[$i]);
     }
 }   
+
+echo "Nombre d'unités enregistrées : $numbres\n";
+    $date  = (string) date('d-m-Y');
+    $heure = (string) date('H:i');
+echo "Date : $date, Heure : $heure\n";
 
 // Fonction pour enregistrer les valeurs Lennox depuis un fichier JSON
 function LogLennox($Id,$Path)

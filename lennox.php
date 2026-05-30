@@ -1,4 +1,7 @@
 <?php
+require_once __DIR__ . '/auth.php';
+auth_bootstrap();
+auth_require_active_session();
 include "Style.php";
 include "stylelennox.php";
 include "Base.php";
@@ -53,6 +56,7 @@ include "TopBar.php";
       <div class="etiquette eti13">-</div>
       <div class="etiquette eti14">-</div>
       <div class="etiquette eti15">-</div>
+      <div class="etiquette eti16">-</div>
       <div class="labeltt tt1">Compresseur 1</div>
       <div class="labeltt tt2">Compresseur 2</div>
       <div class="labeltt tt3">Température<br>Ambiante</div>
@@ -65,6 +69,7 @@ include "TopBar.php";
       <div class="labeltt tt7">Heures du rooftop</div>
       <div class="labeltt tt8">Vanne 1</div>
       <div class="labeltt tt9">Vanne 2</div>
+      <div class="labeltt tt10">Consigne<br>Thermostat</div>
 
     </div>
   </div>
@@ -155,7 +160,7 @@ function renderLennoxToTab(id, data) {
     const mapping = [
       ['.eti1', 40], ['.eti2', 3], ['.eti3', 39], ['.eti4', 36], ['.eti5', 38], ['.eti6', 45],
       ['.eti7', 143], ['.eti8', 135], ['.eti9', 137], ['.eti10', 140], ['.eti11', 37], ['.eti12', 2], ['.tt7',20],
-      ['.eti13', 139], ['.eti14', 142], ['.eti15', 47]
+      ['.eti13', 139], ['.eti14', 142], ['.eti15', 47],['.eti16', 34]
     ];
 
     // Si data absent, tenter d'utiliser le cache ou remplir avec '-'

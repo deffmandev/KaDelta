@@ -1,5 +1,9 @@
 <?php
 include "base.php";
+require_once __DIR__ . '/auth.php';
+
+$wunitesCurrentUser = auth_get_current_user();
+$canSeeAdvancedSettings = auth_is_admin($wunitesCurrentUser);
 
     if (isset($_GET["Groupe"]))
         {
@@ -362,7 +366,7 @@ Function RegistreOption($valeur)
     </div>
     <!-- Fenêtre Paramétrage -->
     <div class="modal" id="settings-modal" style="display:none;">
-        <?php if (!$GroupeActive): ?>
+        <?php if (!$GroupeActive && $canSeeAdvancedSettings): ?>
             <!-- Icône clé à molette pour paramétrage avancé -->
             <svg class="settings-icon" id="advanced-settings-icon" viewBox="0 0 24 24" title="Paramétrage avancé" style="position:absolute;top:18px;right:18px;">
                 <path d="M22.7 19.3l-4.1-4.1c1.1-1.7.9-4-0.6-5.5-1.5-1.5-3.8-1.7-5.5-0.6l-4.1-4.1c-0.4-0.4-1-0.4-1.4 0l-2.1 2.1c-0.4 0.4-0.4 1 0 1.4l4.1 4.1c-1.1 1.7-0.9 4 0.6 5.5 1.5 1.5 3.8 1.7 5.5 0.6l4.1 4.1c0.4 0.4 1 0.4 1.4 0l2.1-2.1c0.4-0.4 0.4-1 0-1.4zM7.1 6.7l1.4-1.4 3.5 3.5-1.4 1.4-3.5-3.5zm7.8 7.8c-1.1 1.1-2.9 1.1-4 0s-1.1-2.9 0-4 2.9-1.1 4 0 1.1 2.9 0 4zm3.5 3.5l-1.4 1.4-3.5-3.5 1.4-1.4 3.5 3.5z"/>
@@ -607,7 +611,7 @@ Function RegistreOption($valeur)
         mainModal.style.display = 'block';
     };
 
-    <?php if (!$GroupeActive): ?>
+    <?php if (!$GroupeActive && $canSeeAdvancedSettings): ?>
         advancedSettingsIcon.onclick = () => {
             settingsModal.style.display = 'none';
             advancedModal.style.display = 'block';
@@ -638,7 +642,17 @@ Function RegistreOption($valeur)
     document.getElementById('confirm-delete-btn').onclick = function() {
         // Appel API suppression
         const id = typeof IdUnite !== 'undefined' ? IdUnite : <?php echo json_encode($UniteId); ?>;
-        fetch('Base.php?table=DefUnites&delete=1&Id=' + encodeURIComponent(id), { method: 'GET' })
+        const deleteParams = new URLSearchParams({
+            api_action: 'delete_row',
+            table: 'DefUnites',
+            Id: String(id)
+        });
+
+        fetch('Base.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+            body: deleteParams.toString()
+        })
             .then(response => response.text())
             .then((text) => {
                 // Optionnel : vérifier le succès côté serveur
@@ -839,14 +853,17 @@ function SetModeBus(IdUnite,Type,idem,valeur)
         <?php endif; ?>
 
         const params = new URLSearchParams({
+            api_action: 'update_table',
             table: table,
             field: field,
             value: value,
             whereField: whereField,
             whereValue: whereValue
         });
-        return fetch('Base.php?' + params.toString(), {
-            method: 'GET'
+        return fetch('Base.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+            body: params.toString()
         })
         .then(response => response.text())
         .catch(err => {

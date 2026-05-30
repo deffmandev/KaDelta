@@ -1,4 +1,7 @@
 <?php
+require_once __DIR__ . '/auth.php';
+auth_bootstrap();
+auth_require_active_session();
 require "Base.php";
 
 $Indexvue = isset($_GET['IV']) ? (int) $_GET['IV'] : 0;

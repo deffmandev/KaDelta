@@ -1,5 +1,13 @@
 <?php
-// ...existing code...
+require_once __DIR__ . '/auth.php';
+auth_bootstrap();
+$currentUser = auth_require_active_session();
+
+if (!auth_is_admin($currentUser)) {
+    http_response_code(403);
+    echo '<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Acces refuse</title></head><body style="font-family:Segoe UI,Arial,sans-serif;background:#f1f5f9;color:#0f172a;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;"><div style="background:#fff;padding:24px 28px;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.12);max-width:520px;"><h2 style="margin:0 0 10px;">Acces refuse</h2><p style="margin:0;line-height:1.45;">Le menu Maintenance est reserve aux administrateurs.</p></div></body></html>';
+    exit;
+}
 ?>
 
 <!DOCTYPE html>
@@ -101,7 +109,15 @@
             <button onclick="openAjouteUniteLgIframe()">Ajoute Unité LG</button>
             <button onclick="openContactIframe()">Contact défaut</button>
             <button onclick="openConfigLennoxIframe()">Configuration Lennox</button>
+            <button onclick="openUsersIframe()">Gestion des utilisateurs</button>
         </div>
+    </div>
+</div>
+
+<!-- Modal pour l'iframe GestionUtilisateurs.php (plein écran) -->
+<div class="modal-bg" id="users-iframe-bg" style="z-index:10006; display:none; background:rgba(0,0,0,0.35);">
+    <div class="modal" id="users-iframe-modal" style="width:100vw;height:100vh;max-width:100vw;max-height:100vh;padding:0;border-radius:0;overflow:hidden;background:transparent;box-shadow:none;">
+        <iframe src="" style="width:100vw;height:100vh;border:none;display:block;position:absolute;top:0;left:0;background:transparent;"></iframe>
     </div>
 </div>
 
@@ -195,6 +211,13 @@
     // Fermeture overlay Config Lennox via Echap
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
+            var usersBg = document.getElementById('users-iframe-bg');
+            if (usersBg && usersBg.classList.contains('visible')) {
+                usersBg.classList.remove('visible');
+                setTimeout(() => { usersBg.style.display = 'none'; usersBg.querySelector('iframe').src = ''; }, 200);
+                return;
+            }
+
             var bg = document.getElementById('config-lennox-iframe-bg');
             if (bg && bg.classList.contains('visible')) {
                 bg.classList.remove('visible');
@@ -257,6 +280,17 @@
             modal.querySelector('iframe').src = 'configsend.php';
         }, 5);
     }
+
+    // Ouvre la modale iframe en plein écran pour Gestion des utilisateurs
+    function openUsersIframe() {
+        var usersBg = document.getElementById('users-iframe-bg');
+        var usersModal = document.getElementById('users-iframe-modal');
+        usersBg.style.display = 'flex';
+        setTimeout(() => {
+            usersBg.classList.add('visible');
+            usersModal.querySelector('iframe').src = 'GestionUtilisateurs.php';
+        }, 5);
+    }
     // Ferme la modale iframe Gestion Groupe depuis l'intérieur de Gtgroupe.php
     // (déjà géré par le script de Gtgroupe.php via window.parent)
 
@@ -270,6 +304,17 @@
 
     // Fermeture overlay Configuration Lennox via postMessage
     window.addEventListener('message', function(e) {
+        if (e.data && e.data.action === 'close_users_iframe') {
+            var usersBg = document.getElementById('users-iframe-bg');
+            if (usersBg && usersBg.classList.contains('visible')) {
+                usersBg.classList.remove('visible');
+                setTimeout(function() {
+                    usersBg.style.display = 'none';
+                    usersBg.querySelector('iframe').src = '';
+                }, 200);
+            }
+        }
+
         if (e.data && (e.data.action === 'configuration_cancel' || e.data.action === 'configuration_saved')) {
             var bg = document.getElementById('config-lennox-iframe-bg');
             if (bg && bg.classList.contains('visible')) {
@@ -290,6 +335,17 @@
             window.parent.OverScreenWunites && (window.parent.OverScreenWunites.style.display = "none");
         }, 200);
     };
+
+    // Ferme la modale Gestion des utilisateurs en cliquant sur le fond
+    document.getElementById('users-iframe-bg').addEventListener('click', function(e) {
+        if (e.target === this) {
+            this.classList.remove('visible');
+            setTimeout(() => {
+                this.style.display = 'none';
+                this.querySelector('iframe').src = '';
+            }, 200);
+        }
+    });
 
 </script>
 </body>

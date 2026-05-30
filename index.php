@@ -1,4 +1,9 @@
-<?php include "Style.php";?>
+<?php
+require_once __DIR__ . '/auth.php';
+auth_bootstrap();
+auth_require_active_session();
+include "Style.php";
+?>
 <!DOCTYPE html>
 <html lang="fr">
 <head>

@@ -1,3 +1,27 @@
+<?php
+$topbarUserName = 'Utilisateur';
+$topbarCurrentUser = null;
+if (function_exists('auth_get_current_user')) {
+    $topbarCurrentUser = auth_get_current_user();
+}
+
+if (is_array($topbarCurrentUser) && isset($topbarCurrentUser['Identifiant']) && trim((string)$topbarCurrentUser['Identifiant']) !== '') {
+    $topbarUserName = trim((string)$topbarCurrentUser['Identifiant']);
+} elseif (isset($_SESSION) && isset($_SESSION['identifiant']) && trim((string)$_SESSION['identifiant']) !== '') {
+    $topbarUserName = trim((string)$_SESSION['identifiant']);
+}
+
+$topbarCanChangePassword = true;
+if (function_exists('auth_is_non_changeable_user')) {
+    $topbarCanChangePassword = !auth_is_non_changeable_user($topbarCurrentUser);
+}
+
+$topbarIsAdmin = false;
+if (function_exists('auth_is_admin')) {
+    $topbarIsAdmin = auth_is_admin($topbarCurrentUser);
+}
+?>
+
 <div class="FrameTitre">
     <img src="Images/LogoKaDelta.png" alt="Ka Delta Logo" style="height:172px;" />
     <h1>Ka Delta Modbus</h1>
@@ -7,16 +31,138 @@
         <button onclick="ClimGroupe()" class="groupe-btn">Action sur<br />groupe</button>
         <button id="btn-programmation" class="groupe-btn">Programmation</button>
         <button id="btn-defaut" class="groupe-btn">Défauts</button>
-        <button onclick="MaintenanceWindows()" class="groupe-btn">Maintenance</button>
+        <?php if ($topbarIsAdmin): ?>
+            <button onclick="MaintenanceWindows()" class="groupe-btn">Maintenance</button>
+        <?php endif; ?>
     </div>
     <div class="horloges">
         <span id="date"></span><br />
         <span id="heure" style="font-variant-numeric:tabular-nums;">
             <span id="h"></span><span id="colon" style="transition:.4s;opacity:0;">:</span><span id="m"></span>
         </span>
+        <div class="topbar-user-menu" id="topbar-user-menu">
+            <button type="button" class="topbar-user-toggle" id="topbar-user-toggle" aria-haspopup="true" aria-expanded="false">
+                <?php echo htmlspecialchars($topbarUserName, ENT_QUOTES, 'UTF-8'); ?>
+                <span class="topbar-user-caret">▼</span>
+            </button>
+            <div class="topbar-user-dropdown" id="topbar-user-dropdown" role="menu" aria-label="Menu utilisateur">
+                <?php if ($topbarCanChangePassword): ?>
+                    <a href="loginch.php" role="menuitem">Changement de mot de passe</a>
+                <?php else: ?>
+                    <span class="menu-item-disabled" role="menuitem" aria-disabled="true">Changement de mot de passe</span>
+                <?php endif; ?>
+                <a href="loginin.php?logout=1" role="menuitem">Deconnexion</a>
+            </div>
+        </div>
     </div>
+    <style>
+        .topbar-user-menu {
+            margin-top: 12px;
+            position: relative;
+            display: block;
+            width: max-content;
+            margin-left: auto;
+            margin-right: auto;
+            text-align: center;
+        }
+
+        .topbar-user-toggle {
+            background: linear-gradient(140deg, rgba(35, 73, 128, 0.95), rgba(26, 98, 180, 0.95));
+            color: #eef6ff;
+            border: 1px solid rgba(167, 205, 255, 0.35);
+            border-radius: 12px;
+            padding: 9px 14px;
+            font-size: 0.98rem;
+            cursor: pointer;
+            min-width: 210px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            box-shadow: 0 8px 16px rgba(6, 18, 38, 0.34);
+        }
+
+        .topbar-user-caret {
+            font-size: 0.8rem;
+            opacity: 0.9;
+        }
+
+        .topbar-user-dropdown {
+            display: none;
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            top: calc(100% + 6px);
+            min-width: 280px;
+            border-radius: 14px;
+            overflow: hidden;
+            background: rgba(13, 33, 63, 0.98);
+            border: 1px solid rgba(152, 193, 255, 0.3);
+            box-shadow: 0 14px 28px rgba(5, 15, 31, 0.5);
+            z-index: 1600;
+        }
+
+        .topbar-user-dropdown a {
+            display: block;
+            padding: 12px 16px;
+            color: #e4efff;
+            text-decoration: none;
+            font-size: 1rem;
+            border-bottom: 1px solid rgba(138, 172, 223, 0.22);
+        }
+
+        .topbar-user-dropdown .menu-item-disabled {
+            display: block;
+            padding: 12px 16px;
+            color: rgba(224, 235, 255, 0.45);
+            font-size: 1rem;
+            border-bottom: 1px solid rgba(138, 172, 223, 0.22);
+            cursor: not-allowed;
+            background: rgba(124, 144, 176, 0.16);
+        }
+
+        .topbar-user-dropdown a:last-child {
+            border-bottom: none;
+        }
+
+        .topbar-user-dropdown a:hover {
+            background: rgba(37, 87, 161, 0.45);
+        }
+
+        .topbar-user-menu.open .topbar-user-dropdown {
+            display: block;
+        }
+    </style>
     <script>
     (function(){
+        // Keepalive session: prolonge la session uniquement en cas d'activite utilisateur.
+        let lastAuthPingTs = 0;
+        const authPingThrottleMs = 60000;
+
+        function pingAuthKeepalive() {
+            const now = Date.now();
+            if ((now - lastAuthPingTs) < authPingThrottleMs) return;
+            lastAuthPingTs = now;
+
+            fetch('auth_ping.php', {
+                method: 'GET',
+                credentials: 'same-origin',
+                cache: 'no-store'
+            }).then(function(response) {
+                if (response.status === 401) {
+                    window.location.href = 'loginin.php?expired=1';
+                }
+            }).catch(function() {
+                // Evite de bloquer l'UI si le ping echoue ponctuellement.
+            });
+        }
+
+        ['mousemove', 'click', 'keydown', 'scroll', 'touchstart'].forEach(function(evt) {
+            window.addEventListener(evt, pingAuthKeepalive, { passive: true });
+        });
+
+        pingAuthKeepalive();
+
         // Horloge
         function updateDateHeure() {
             const now = new Date();
@@ -34,6 +180,26 @@
         }
         updateDateHeure();
         setInterval(updateDateHeure, 1000);
+
+        if (!window.__topbarUserMenuInit) {
+            window.__topbarUserMenuInit = true;
+            const userMenu = document.getElementById('topbar-user-menu');
+            const userToggle = document.getElementById('topbar-user-toggle');
+            if (userMenu && userToggle) {
+                userToggle.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const isOpen = userMenu.classList.toggle('open');
+                    userToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+                });
+
+                document.addEventListener('click', function(e) {
+                    if (!userMenu.contains(e.target)) {
+                        userMenu.classList.remove('open');
+                        userToggle.setAttribute('aria-expanded', 'false');
+                    }
+                });
+            }
+        }
 
         // Initialisation unique TopBar
         if (!window.__topbarInit) {
