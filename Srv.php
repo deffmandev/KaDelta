@@ -74,6 +74,14 @@ if (isset($_COOKIE["compteLog"])) {
         $srvprog_result = @file_get_contents('http://localhost/SrvSend.php');
         echo htmlspecialchars($srvprog_result);
 
+        //test provisoir de controle par gtc des lennox
+        $srvprog_result = @file_get_contents('http://localhost/lgp.php');
+        echo htmlspecialchars($srvprog_result);
+
+        $srvprog_result = @file_get_contents('http://localhost/SrvKaLogIndex.php');
+        echo htmlspecialchars($srvprog_result);
+
+
         if ($compteLog-- < 2)
         {            
             $compteLog = $Comptelogbase;

@@ -37,6 +37,20 @@ include "TopBar.php";
   </div>
 </div>
 
+<dialog id="modal-consigne" class="vg-dialog lx-consigne-dialog">
+  <form method="dialog" id="modal-consigne-form">
+    <div class="lx-consigne-header">
+      <h2 id="modal-consigne-title">Consigne Thermostat</h2>
+      <button type="button" class="lx-consigne-close" id="modal-consigne-close" aria-label="Fermer">&times;</button>
+    </div>
+    <div class="temp-controls">
+      <button type="button" class="temp-btn" id="modal-consigne-minus" aria-label="Diminuer">-</button>
+      <output class="temp-value" id="modal-consigne-value" for="modal-consigne-minus modal-consigne-plus">21&deg;C</output>
+      <button type="button" class="temp-btn" id="modal-consigne-plus" aria-label="Augmenter">+</button>
+    </div>
+  </form>
+</dialog>
+
 <?php for ($id=0; $id < 3; $id++) { ?>
   <div class="tab-content<?php echo $id === 0 ? ' active' : ''; ?>">
     <div class="cadreCTA">
@@ -263,6 +277,170 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   }, false);
 })();
+
+// ── Modal consigne thermostat (etiquette 16) ─────────────────────────────────
+const consigneModal = document.getElementById('modal-consigne');
+const consigneForm = document.getElementById('modal-consigne-form');
+const consigneTitle = document.getElementById('modal-consigne-title');
+const consigneValueOutput = document.getElementById('modal-consigne-value');
+const consigneMinus = document.getElementById('modal-consigne-minus');
+const consignePlus = document.getElementById('modal-consigne-plus');
+const consigneClose = document.getElementById('modal-consigne-close');
+
+const consigneState = {
+  rooftopId: 0,
+  registerAddress: 34,
+  min: 8,
+  max: 32,
+  value: 20,
+  title: 'Consigne Thermostat',
+  sourceElement: null,
+  queue: Promise.resolve()
+};
+
+function clampConsigneValue(value) {
+  return Math.min(consigneState.max, Math.max(consigneState.min, Math.round(value)));
+}
+
+function renderConsigneModal() {
+  consigneTitle.textContent = consigneState.title;
+  consigneValueOutput.textContent = String(consigneState.value) + '°C';
+}
+
+function closeConsigneModal() {
+  if (consigneModal.open) {
+    consigneModal.close();
+  }
+}
+
+function openConsigneModal(options) {
+  consigneState.rooftopId = Number(options.rooftopId || 0);
+  consigneState.registerAddress = Number(options.registerAddress || 34);
+  consigneState.min = Number(options.min || 8);
+  consigneState.max = Number(options.max || 32);
+  consigneState.title = String(options.title || 'Consigne Thermostat');
+  consigneState.sourceElement = options.sourceElement || null;
+  const parsedInitial = Number(options.initialValue);
+  consigneState.value = clampConsigneValue(Number.isFinite(parsedInitial) ? parsedInitial : 20);
+  renderConsigneModal();
+  if (!consigneModal.open) {
+    consigneModal.showModal();
+  }
+}
+
+async function sendConsigneToApi(rooftopId, register, value) {
+  const params = new URLSearchParams({
+    Id: String(rooftopId),
+    register: String(register),
+    valeur: String(value)
+  });
+
+  const response = await fetch('LennoxSetConsigne.php', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      'Accept': 'application/json'
+    },
+    body: params.toString()
+  });
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !payload || payload.success !== true) {
+    throw new Error(payload && payload.error ? payload.error : 'Ecriture Modbus impossible');
+  }
+
+  return payload;
+}
+
+function queueConsigneSend(nextValue) {
+  if (!consigneState.rooftopId) {
+    return;
+  }
+
+  const rooftopId = consigneState.rooftopId;
+  const register = consigneState.registerAddress;
+  const valueToSend = nextValue;
+
+  if (consigneState.sourceElement) {
+    consigneState.sourceElement.textContent = String(valueToSend);
+  }
+
+  consigneState.queue = consigneState.queue
+    .then(async () => {
+      try {
+        await sendConsigneToApi(rooftopId, register, valueToSend);
+      } catch (_) {
+        await new Promise((resolve) => setTimeout(resolve, 10000));
+        await sendConsigneToApi(rooftopId, register, valueToSend);
+      }
+    })
+    .catch((e) => {
+      console.error('Erreur consigne thermostat apres retry:', e);
+    });
+}
+
+function changeConsigne(delta) {
+  const before = consigneState.value;
+  const after = clampConsigneValue(before + delta);
+  if (after === before) {
+    return;
+  }
+  consigneState.value = after;
+  renderConsigneModal();
+  queueConsigneSend(after);
+}
+
+consigneMinus.addEventListener('click', () => changeConsigne(-1));
+consignePlus.addEventListener('click', () => changeConsigne(1));
+consigneClose.addEventListener('click', closeConsigneModal);
+
+consigneForm.addEventListener('submit', function(event) {
+  event.preventDefault();
+});
+
+// Fermer en cliquant hors de la boite
+consigneModal.addEventListener('click', function(event) {
+  const rect = consigneModal.getBoundingClientRect();
+  const inside = (
+    event.clientX >= rect.left &&
+    event.clientX <= rect.right &&
+    event.clientY >= rect.top &&
+    event.clientY <= rect.bottom
+  );
+  if (!inside) {
+    closeConsigneModal();
+  }
+});
+
+document.addEventListener('click', function(e) {
+  const trigger = e.target.closest('.eti16');
+  if (!trigger) {
+    return;
+  }
+
+  const tab = trigger.closest('.tab-content');
+  if (!tab) {
+    return;
+  }
+
+  const tabs = Array.from(document.querySelectorAll('.tab-content'));
+  const tabIndex = tabs.indexOf(tab);
+  if (tabIndex < 0) {
+    return;
+  }
+
+  const rooftopId = tabIndex + 1;
+  const initialValue = Number(String(trigger.textContent || '').replace(',', '.').trim());
+  openConsigneModal({
+    rooftopId: rooftopId,
+    registerAddress: 34,
+    min: 8,
+    max: 32,
+    initialValue: Number.isFinite(initialValue) ? initialValue : 20,
+    title: 'Consigne Thermostat',
+    sourceElement: trigger
+  });
+});
 
 // Gestion des boutons d'acquittement
 document.addEventListener('click', function(e) {

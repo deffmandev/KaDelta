@@ -2450,9 +2450,9 @@ renderConfigList();
 
 
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+<script src="libs/chartjs/chart.umd.min.js"></script>
+<script src="libs/hammerjs/hammer.min.js"></script>
+<script src="libs/chartjs-plugin-zoom/chartjs-plugin-zoom.min.js"></script>
 <script>
 const rawGraphLines = <?php echo json_encode($ConfigLigne, $jsonOptions); ?>;
 const graphContext = {
@@ -2460,7 +2460,7 @@ const graphContext = {
     title: <?php echo json_encode($NomVue, $jsonOptions); ?>,
     defaultDevice: <?php echo json_encode($requestedDevice, $jsonOptions); ?>,
     date: <?php echo json_encode($requestedDate, $jsonOptions); ?>,
-    apiBaseUrl: 'http://26.133.159.175//ApiLogs.php'
+    apiBaseUrl: 'ApiLogs.php'
 };
 
 const colorPalette = [
@@ -4231,16 +4231,6 @@ async function loadCurve(resetZoomOnSuccess) {
             const previewMap = {};
             previewAddData(previewMap, endpointsData);
 
-            // Debug : affiche l'etat initial du tableau dans la console
-            console.log('[Apercu] Etat initial previewMap (endpoints) :');
-            const dbgInitial = {};
-            for (const device of Object.keys(previewMap)) {
-                for (const heure of Object.keys(previewMap[device]).sort()) {
-                    dbgInitial[heure] = previewMap[device][heure];
-                }
-            }
-            console.table(dbgInitial);
-
             const lastMin = heureToMinutes(timeRange.last);
             let   nextMin = heureToMinutes(timeRange.first) + 60; // premier point : t_first + 1h
 
@@ -4251,15 +4241,7 @@ async function loadCurve(resetZoomOnSuccess) {
                 previewAddData(previewMap, pointData);
                 try {
                     applyPreviewToCharts(previewMap, seriesList);
-                    // Debug : affiche le tableau apres chaque nouvelle valeur
-                    console.log('[Apercu] Apres ajout ' + heure + ' :');
-                    const dbg = {};
-                    for (const device of Object.keys(previewMap)) {
-                        for (const h of Object.keys(previewMap[device]).sort()) {
-                            dbg[h] = previewMap[device][h];
-                        }
-                    }
-                    console.table(dbg);
+
                     setStatus('Apercu ' + heure + '...', false);
                     // Cede le controle au navigateur pour qu'il peigne le graphique
                     await new Promise((resolve) => requestAnimationFrame(resolve));

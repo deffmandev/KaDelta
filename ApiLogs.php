@@ -3,6 +3,8 @@
 declare(strict_types=1);
 ob_start(); // capture tout output parasite (warnings BaseLog, etc.)
 
+define('LOG_SKIP_AUTO_BOOTSTRAP', true);
+
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
@@ -44,6 +46,23 @@ function apiLogsNormalizeDate(string $date): ?string
 	return null;
 }
 
+function apiLogsQuoteIdentifier(string $value): string
+{
+	return '[' . str_replace(']', ']]', $value) . ']';
+}
+
+function apiLogsBuildLogSourceSql(array $databaseNames): string
+{
+	$parts = [];
+	foreach (array_values(array_unique($databaseNames)) as $databaseName) {
+		$parts[] = 'SELECT Id, [Date], Heure, Device, Point, Valeur, DateNV FROM '
+			. apiLogsQuoteIdentifier($databaseName)
+			. '.dbo.Log WITH (NOLOCK)';
+	}
+
+	return implode(' UNION ALL ', $parts);
+}
+
 // ── Mode batch ──────────────────────────────────────────────────────────────
 // GET ?batch=1&device=X&points=-1,1,2,5&date=dd-mm-yyyy
 // Retourne un objet JSON : { "-1": [...], "1": [...], "2": [...], "5": [...] }
@@ -64,8 +83,10 @@ if (isset($_GET['batch']) && $_GET['batch'] === '1') {
 		]);
 	}
 
-	global $connLog;
-	if (!$connLog) {
+	$logDatabases = log_get_read_databases($bDate);
+	$logSourceSql = apiLogsBuildLogSourceSql($logDatabases);
+	$connLog = log_get_read_connection($bDate);
+	if (!$connLog || $logSourceSql === '') {
 		apiLogsRespond(500, ['success' => false, 'error' => 'Connexion base logs indisponible']);
 	}
 
@@ -87,13 +108,27 @@ if (isset($_GET['batch']) && $_GET['batch'] === '1') {
 	}
 
 	// ── Cache fichier ────────────────────────────────────────────────────────
-	// Jours passes : cache permanent (donnees immuables)
+	// Jours passes : cache 7 jours (donnees immuables)
 	// Aujourd'hui  : cache 90 secondes (donnees live)
+	$cacheDir = __DIR__ . DIRECTORY_SEPARATOR . 'cache';
+	if (!is_dir($cacheDir)) {
+		@mkdir($cacheDir, 0750, true);
+	}
 	$sortedPts = $allPts; sort($sortedPts);
 	$cacheKey  = 'apilogs_' . md5($bDeviceInt . '|' . implode(',', $sortedPts) . '|' . $bDate . '|s' . $bStep . 't' . $bTop . ($bEndpoints ? 'e1' : '') . ($bHeure !== '' ? 'h' . $bHeure : ''));
-	$cacheFile = rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $cacheKey . '.json';
+	$cacheFile = $cacheDir . DIRECTORY_SEPARATOR . $cacheKey . '.json';
 	$isToday   = ($bDate === date('d-m-Y'));
-	$cacheTtl  = $isToday ? 90 : PHP_INT_MAX;
+	$cacheTtl  = $isToday ? 90 : (7 * 24 * 3600);
+
+	// Nettoyage periodique : 1 chance sur 200 de purger les fichiers expires
+	if (random_int(1, 200) === 1 && is_dir($cacheDir)) {
+		$nowTs = time();
+		foreach (glob($cacheDir . DIRECTORY_SEPARATOR . 'apilogs_*.json') ?: [] as $oldFile) {
+			if ($nowTs - @filemtime($oldFile) > (7 * 24 * 3600)) {
+				@unlink($oldFile);
+			}
+		}
+	}
 
 	if (file_exists($cacheFile)) {
 		$cacheAge = time() - filemtime($cacheFile);
@@ -122,12 +157,12 @@ if (isset($_GET['batch']) && $_GET['batch'] === '1') {
 				. ' FROM (' . $ptUnion . ') AS src(Pt)'
 				. ' CROSS APPLY ('
 				. '   SELECT TOP 1 Valeur, Heure, 0 AS _ord'
-				. '   FROM Log WITH (NOLOCK)'
+				. '   FROM (' . $logSourceSql . ') AS LogSource'
 				. '   WHERE Device = ' . $bDeviceInt
 				. '   AND Point = src.Pt AND DateNV = ? ORDER BY Id ASC'
 				. '   UNION ALL'
 				. '   SELECT TOP 1 Valeur, Heure, 1'
-				. '   FROM Log WITH (NOLOCK)'
+				. '   FROM (' . $logSourceSql . ') AS LogSource'
 				. '   WHERE Device = ' . $bDeviceInt
 				. '   AND Point = src.Pt AND DateNV = ? ORDER BY Id DESC'
 				. ' ) AS t ORDER BY src.Pt, t._ord';
@@ -147,7 +182,7 @@ if (isset($_GET['batch']) && $_GET['batch'] === '1') {
 				. ' FROM (' . $ptUnion . ') AS src(Pt)'
 				. ' CROSS APPLY ('
 				. '   SELECT TOP 1 Valeur, Heure'
-				. '   FROM Log WITH (NOLOCK)'
+				. '   FROM (' . $logSourceSql . ') AS LogSource'
 				. '   WHERE Device = ' . $bDeviceInt
 				. '   AND Point = src.Pt AND DateNV = ?'
 				. '   AND CONVERT(nvarchar(10), Heure) >= ?'
@@ -155,26 +190,6 @@ if (isset($_GET['batch']) && $_GET['batch'] === '1') {
 				. ' ) AS t'
 				. ' ORDER BY src.Pt';
 			$params = [$bDate, $bHeure];
-
-		} elseif ($bStep > 1) {
-			// ─ STEP : ROW_NUMBER SQL-side ─────────────────────────────────
-			// PHP recoit seulement 720/$bStep lignes/point (pas 720)
-			// Bottleneck mesure : ~10ms/appel ODBC => 720 = 7s, 3 = 30ms
-			// step=240 => ~3 pts/courbe (ecart ~8h) => ~30ms
-			// step=30  => ~24 pts/courbe (ecart ~1h) => ~240ms
-			// % inligne comme int literal => aucun conflit driver sqlsrv
-			$sql = 'SELECT Pt, Valeur, Heure FROM ('
-				. ' SELECT CAST(Point AS int) AS Pt,'
-				. '  CONVERT(nvarchar(50), Valeur) AS Valeur,'
-				. '  CONVERT(nvarchar(10), Heure) AS Heure,'
-				. '  ROW_NUMBER() OVER(PARTITION BY Point ORDER BY Id) AS _rn'
-				. ' FROM Log WITH (NOLOCK)'
-				. ' WHERE Device = ' . $bDeviceInt
-				. ' AND Point IN (' . $ptLiterals . ')'
-				. ' AND DateNV = ?'
-				. ') AS _x WHERE (_rn - 1) % ' . $bStep . ' = 0'
-				. ' ORDER BY Pt, _rn ASC';
-			$params = [$bDate];
 
 		} elseif ($bTop > 0) {
 			// ─ CROSS APPLY TOP N (debut de journee) ──────────────────────
@@ -185,7 +200,7 @@ if (isset($_GET['batch']) && $_GET['batch'] === '1') {
 				. ' FROM (' . $ptUnion . ') AS src(Pt)'
 				. ' CROSS APPLY ('
 				. '   SELECT TOP ' . $bTop . ' Valeur, Heure'
-				. '   FROM Log WITH (NOLOCK)'
+				. '   FROM (' . $logSourceSql . ') AS LogSource'
 				. '   WHERE Device = ' . $bDeviceInt
 				. '   AND Point = src.Pt AND DateNV = ? ORDER BY Id'
 				. ' ) AS t'
@@ -193,30 +208,18 @@ if (isset($_GET['batch']) && $_GET['batch'] === '1') {
 			$params = [$bDate];
 
 		} else {
-			// ─ Chargement complet : UNION ALL ────────────────────────────
-			// Branche 1 : lignes migrees (DateNV indexe)
-			// Branche 2 : lignes post-migration (DateNV IS NULL)
-			$sql = 'SELECT Pt, Valeur, Heure FROM ('
-				. '  SELECT CAST(Point AS int) AS Pt,'
-				. '   CONVERT(nvarchar(50), Valeur) AS Valeur,'
-				. '   CONVERT(nvarchar(10), Heure) AS Heure,'
-				. '   Id'
-				. '  FROM Log WITH (NOLOCK)'
-				. '  WHERE Device = ' . $bDeviceInt
-				. '  AND Point IN (' . $ptLiterals . ')'
-				. '  AND DateNV = ?'
-				. '  UNION ALL'
-				. '  SELECT CAST(Point AS int),'
-				. '   CONVERT(nvarchar(50), Valeur),'
-				. '   CONVERT(nvarchar(10), Heure),'
-				. '   Id'
-				. '  FROM Log WITH (NOLOCK)'
-				. '  WHERE Device = ' . $bDeviceInt
-				. '  AND Point IN (' . $ptLiterals . ')'
-				. '  AND DateNV IS NULL'
-				. '  AND CONVERT(nvarchar(20), Date) = ?'
-				. ') AS _all ORDER BY Pt, Id ASC';
-			$params = [$bDate, $bDate];
+			// ─ Chargement complet via index DateNV ─────────────────────
+			// Toutes les lignes mensuelles ont DateNV rempli (ecrit par LogIn).
+			// Pas de UNION ALL/scan sur Date : seek sur (Device, Point, DateNV, Id).
+			$sql = 'SELECT CAST(Point AS int) AS Pt,'
+				. ' CONVERT(nvarchar(50), Valeur) AS Valeur,'
+				. ' CONVERT(nvarchar(10), Heure) AS Heure'
+				. ' FROM (' . $logSourceSql . ') AS LogSource'
+				. ' WHERE Device = ' . $bDeviceInt
+				. ' AND Point IN (' . $ptLiterals . ')'
+				. ' AND DateNV = ?'
+				. ' ORDER BY Point, Id ASC';
+			$params = [$bDate];
 		}
 
 		$stmt = sqlsrv_query($connLog, $sql, $params);
@@ -261,9 +264,11 @@ if ($device === '' || $point === '' || $date === null)
 	]);
 }
 
-global $connLog;
+$logDatabases = log_get_read_databases($date);
+$logSourceSql = apiLogsBuildLogSourceSql($logDatabases);
+$connLog = log_get_read_connection($date);
 
-if (!$connLog) {
+if (!$connLog || $logSourceSql === '') {
 	apiLogsRespond(500, [
 		'success' => false,
 		'error' => 'Connexion base logs indisponible',
@@ -274,10 +279,10 @@ $deviceInt = (int) $device;
 $pointInt  = (int) $point;
 
 if ($point === "-1") {
-	$sql    = 'SELECT CAST(Heure AS nvarchar(10)) AS Valeur FROM Log WITH (NOLOCK) WHERE Device = ? AND Point = ? AND Date = ? ORDER BY Id ASC';
+	$sql    = 'SELECT CAST(Heure AS nvarchar(10)) AS Valeur FROM (' . $logSourceSql . ') AS LogSource WHERE Device = ? AND Point = ? AND Date = ? ORDER BY Id ASC';
 	$params = [(string) $deviceInt, '1', $date];
 } else {
-	$sql    = 'SELECT CAST(Valeur AS nvarchar(50)) AS Valeur FROM Log WITH (NOLOCK) WHERE Device = ? AND Point = ? AND Date = ? ORDER BY Id ASC';
+	$sql    = 'SELECT CAST(Valeur AS nvarchar(50)) AS Valeur FROM (' . $logSourceSql . ') AS LogSource WHERE Device = ? AND Point = ? AND Date = ? ORDER BY Id ASC';
 	$params = [(string) $deviceInt, (string) $pointInt, $date];
 }
 
