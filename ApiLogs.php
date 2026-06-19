@@ -9,7 +9,7 @@ header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
 header('Access-Control-Allow-Private-Network: true');
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
     http_response_code(204);
     exit;
 }
@@ -20,11 +20,111 @@ require_once __DIR__ . '/BaseLog.php';
 
 sqlsrv_configure('WarningsReturnAsErrors', 0);
 
+error_reporting(E_ALL);
+
+set_error_handler(static function (int $severity, string $message, string $file, int $line): bool {
+	if (!(error_reporting() & $severity)) {
+		return false;
+	}
+
+	throw new ErrorException($message, 0, $severity, $file, $line);
+});
+
+register_shutdown_function(static function (): void {
+	$error = error_get_last();
+	if (!is_array($error)) {
+		return;
+	}
+
+	$fatalTypes = [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR, E_RECOVERABLE_ERROR];
+	if (!in_array((int)($error['type'] ?? 0), $fatalTypes, true)) {
+		return;
+	}
+
+	if (!headers_sent()) {
+		http_response_code(500);
+		header('Content-Type: application/json; charset=utf-8');
+	}
+
+	if (ob_get_level()) {
+		ob_clean();
+	}
+
+	echo apiLogsJsonEncode([
+		'success' => false,
+		'error' => 'Erreur fatale lors du traitement des logs',
+	]);
+});
+
+function apiLogsJsonEncode(array $payload): string
+{
+	$json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_NUMERIC_CHECK);
+	if (is_string($json)) {
+		return $json;
+	}
+
+	$fallback = json_encode([
+		'success' => false,
+		'error' => 'Impossible d\'encoder la réponse JSON',
+	], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_NUMERIC_CHECK);
+
+	return is_string($fallback) ? $fallback : '{"success":false,"error":"Impossible d\'encoder la réponse JSON"}';
+}
+
+function apiLogsSqlErrorDetails(): string
+{
+	if (function_exists('log_get_last_sql_error_summary')) {
+		$summary = trim((string)log_get_last_sql_error_summary());
+		if ($summary !== '') {
+			return $summary;
+		}
+	}
+
+	$errors = sqlsrv_errors() ?: [];
+	$messages = [];
+	foreach ($errors as $err) {
+		$messages[] = (string)($err['message'] ?? 'Erreur SQL inconnue');
+	}
+
+	return implode(' | ', $messages);
+}
+
+function apiLogsReadJsonCache(string $path): ?array
+{
+	if (!is_file($path) || !is_readable($path)) {
+		return null;
+	}
+
+	$content = @file_get_contents($path);
+	if (!is_string($content) || trim($content) === '') {
+		return null;
+	}
+
+	$decoded = json_decode($content, true);
+	if (!is_array($decoded)) {
+		@unlink($path);
+		return null;
+	}
+
+	return $decoded;
+}
+
+function apiLogsWriteJsonCache(string $path, array $payload): bool
+{
+	$directory = dirname($path);
+	if (!is_dir($directory) && !@mkdir($directory, 0750, true) && !is_dir($directory)) {
+		return false;
+	}
+
+	$json = apiLogsJsonEncode($payload);
+	return @file_put_contents($path, $json, LOCK_EX) !== false;
+}
+
 function apiLogsRespond(int $statusCode, array $payload): void
 {
 	if (ob_get_level()) { ob_clean(); } // supprime tout output parasite avant JSON
 	http_response_code($statusCode);
-	echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_NUMERIC_CHECK);
+	echo apiLogsJsonEncode($payload);
 	exit;
 }
 
@@ -51,17 +151,26 @@ function apiLogsQuoteIdentifier(string $value): string
 	return '[' . str_replace(']', ']]', $value) . ']';
 }
 
-function apiLogsBuildLogSourceSql(array $databaseNames): string
+function apiLogsBuildWideSelectColumns(array $pointNumbers, bool $includeHeure = true): string
 {
-	$parts = [];
-	foreach (array_values(array_unique($databaseNames)) as $databaseName) {
-		$parts[] = 'SELECT Id, [Date], Heure, Device, Point, Valeur, DateNV FROM '
-			. apiLogsQuoteIdentifier($databaseName)
-			. '.dbo.Log WITH (NOLOCK)';
+	$columns = [];
+	if ($includeHeure) {
+		$columns[] = 'Heure';
 	}
 
-	return implode(' UNION ALL ', $parts);
+	foreach (array_values(array_unique($pointNumbers)) as $pointNumber) {
+		$pointInt = (int) $pointNumber;
+		if ($pointInt < 0 || $pointInt > 500) {
+			continue;
+		}
+
+		$columns[] = '[P' . $pointInt . ']';
+	}
+
+	return implode(', ', $columns);
 }
+
+try {
 
 // ── Mode batch ──────────────────────────────────────────────────────────────
 // GET ?batch=1&device=X&points=-1,1,2,5&date=dd-mm-yyyy
@@ -83,10 +192,8 @@ if (isset($_GET['batch']) && $_GET['batch'] === '1') {
 		]);
 	}
 
-	$logDatabases = log_get_read_databases($bDate);
-	$logSourceSql = apiLogsBuildLogSourceSql($logDatabases);
 	$connLog = log_get_read_connection($bDate);
-	if (!$connLog || $logSourceSql === '') {
+	if (!$connLog) {
 		apiLogsRespond(500, ['success' => false, 'error' => 'Connexion base logs indisponible']);
 	}
 
@@ -111,11 +218,11 @@ if (isset($_GET['batch']) && $_GET['batch'] === '1') {
 	// Jours passes : cache 7 jours (donnees immuables)
 	// Aujourd'hui  : cache 90 secondes (donnees live)
 	$cacheDir = __DIR__ . DIRECTORY_SEPARATOR . 'cache';
-	if (!is_dir($cacheDir)) {
-		@mkdir($cacheDir, 0750, true);
+	if (!is_dir($cacheDir) && !@mkdir($cacheDir, 0750, true) && !is_dir($cacheDir)) {
+		apiLogsRespond(500, ['success' => false, 'error' => 'Impossible de creer le cache local']);
 	}
 	$sortedPts = $allPts; sort($sortedPts);
-	$cacheKey  = 'apilogs_' . md5($bDeviceInt . '|' . implode(',', $sortedPts) . '|' . $bDate . '|s' . $bStep . 't' . $bTop . ($bEndpoints ? 'e1' : '') . ($bHeure !== '' ? 'h' . $bHeure : ''));
+	$cacheKey  = 'apilogs_' . md5('v2|' . $bDeviceInt . '|' . implode(',', $sortedPts) . '|' . $bDate . '|s' . $bStep . 't' . $bTop . ($bEndpoints ? 'e1' : '') . ($bHeure !== '' ? 'h' . $bHeure : ''));
 	$cacheFile = $cacheDir . DIRECTORY_SEPARATOR . $cacheKey . '.json';
 	$isToday   = ($bDate === date('d-m-Y'));
 	$cacheTtl  = $isToday ? 90 : (7 * 24 * 3600);
@@ -130,10 +237,10 @@ if (isset($_GET['batch']) && $_GET['batch'] === '1') {
 		}
 	}
 
-	if (file_exists($cacheFile)) {
+	if (is_file($cacheFile)) {
 		$cacheAge = time() - filemtime($cacheFile);
 		if ($cacheAge < $cacheTtl) {
-			$cached = @json_decode((string) file_get_contents($cacheFile), true);
+			$cached = apiLogsReadJsonCache($cacheFile);
 			if (is_array($cached)) {
 				apiLogsRespond(200, $cached);
 			}
@@ -144,107 +251,161 @@ if (isset($_GET['batch']) && $_GET['batch'] === '1') {
 
 	set_time_limit(0);
 
-	if (!empty($allPts)) {
-		$ptLiterals = implode(', ', array_map('intval', $allPts));
+	if (count($allPts) === 0) {
+		apiLogsRespond(500, [
+			'success' => false,
+			'error' => 'Aucun point valide a interroger dans LogWide',
+		]);
+	}
 
-		if ($bEndpoints) {
-			// ─ ENDPOINTS : 1er + dernier par point ────────────────────────
-			// CROSS APPLY first+last => 2 lignes PHP/point => ~20ms total
-			$ptUnion = implode(' UNION ALL ', array_map(fn(int $p) => 'SELECT ' . $p, $allPts));
-			$sql = 'SELECT src.Pt,'
-				. ' CONVERT(nvarchar(50), t.Valeur) AS Valeur,'
-				. ' CONVERT(nvarchar(10), t.Heure) AS Heure'
-				. ' FROM (' . $ptUnion . ') AS src(Pt)'
-				. ' CROSS APPLY ('
-				. '   SELECT TOP 1 Valeur, Heure, 0 AS _ord'
-				. '   FROM (' . $logSourceSql . ') AS LogSource'
-				. '   WHERE Device = ' . $bDeviceInt
-				. '   AND Point = src.Pt AND DateNV = ? ORDER BY Id ASC'
-				. '   UNION ALL'
-				. '   SELECT TOP 1 Valeur, Heure, 1'
-				. '   FROM (' . $logSourceSql . ') AS LogSource'
-				. '   WHERE Device = ' . $bDeviceInt
-				. '   AND Point = src.Pt AND DateNV = ? ORDER BY Id DESC'
-				. ' ) AS t ORDER BY src.Pt, t._ord';
-			$params = [$bDate, $bDate];
+	$selectColumns = apiLogsBuildWideSelectColumns($allPts, true);
+	$sql = "
+SELECT " . $selectColumns . "
+FROM dbo.LogWide WITH (NOLOCK)
+WHERE Device = ?
+	AND DateNV = ?
+	AND Heure IS NOT NULL
+	AND LTRIM(RTRIM(CONVERT(NVARCHAR(16), Heure))) <> ''
+ORDER BY Heure ASC;
+";
+	$stmt = sqlsrv_query($connLog, $sql, [$bDeviceInt, $bDate]);
+	if ($stmt === false) {
+		apiLogsRespond(500, [
+			'success' => false,
+			'error' => 'Erreur SQL batch',
+			'details' => apiLogsSqlErrorDetails(),
+		]);
+	}
 
-		} elseif ($bHeure !== '') {
-			// ─ SINGLE TIME POINT : 1 point par serie au plus proche de $bHeure ─
-			// CROSS APPLY TOP 1 WHERE CONVERT(Heure) >= ? ORDER BY Id
-			// Heure est de type text => CONVERT obligatoire pour la comparaison
-			// seek sur (Device, Point, DateNV) puis scan jusqu'a Heure >= cible
-			// pour 0h30 : ~15 lignes scannees ; pour 12h00 : ~360 => rapide
-			// PHP recoit 1 ligne par point => ~50ms total
-			$ptUnion = implode(' UNION ALL ', array_map(fn(int $p) => 'SELECT ' . $p, $allPts));
-			$sql = 'SELECT src.Pt,'
-				. ' CONVERT(nvarchar(50), t.Valeur) AS Valeur,'
-				. ' CONVERT(nvarchar(10), t.Heure) AS Heure'
-				. ' FROM (' . $ptUnion . ') AS src(Pt)'
-				. ' CROSS APPLY ('
-				. '   SELECT TOP 1 Valeur, Heure'
-				. '   FROM (' . $logSourceSql . ') AS LogSource'
-				. '   WHERE Device = ' . $bDeviceInt
-				. '   AND Point = src.Pt AND DateNV = ?'
-				. '   AND CONVERT(nvarchar(10), Heure) >= ?'
-				. '   ORDER BY Id ASC'
-				. ' ) AS t'
-				. ' ORDER BY src.Pt';
-			$params = [$bDate, $bHeure];
-
-		} elseif ($bTop > 0) {
-			// ─ CROSS APPLY TOP N (debut de journee) ──────────────────────
-			$ptUnion = implode(' UNION ALL ', array_map(fn(int $p) => 'SELECT ' . $p, $allPts));
-			$sql = 'SELECT src.Pt,'
-				. ' CONVERT(nvarchar(50), t.Valeur) AS Valeur,'
-				. ' CONVERT(nvarchar(10), t.Heure) AS Heure'
-				. ' FROM (' . $ptUnion . ') AS src(Pt)'
-				. ' CROSS APPLY ('
-				. '   SELECT TOP ' . $bTop . ' Valeur, Heure'
-				. '   FROM (' . $logSourceSql . ') AS LogSource'
-				. '   WHERE Device = ' . $bDeviceInt
-				. '   AND Point = src.Pt AND DateNV = ? ORDER BY Id'
-				. ' ) AS t'
-				. ' ORDER BY src.Pt';
-			$params = [$bDate];
-
-		} else {
-			// ─ Chargement complet via index DateNV ─────────────────────
-			// Toutes les lignes mensuelles ont DateNV rempli (ecrit par LogIn).
-			// Pas de UNION ALL/scan sur Date : seek sur (Device, Point, DateNV, Id).
-			$sql = 'SELECT CAST(Point AS int) AS Pt,'
-				. ' CONVERT(nvarchar(50), Valeur) AS Valeur,'
-				. ' CONVERT(nvarchar(10), Heure) AS Heure'
-				. ' FROM (' . $logSourceSql . ') AS LogSource'
-				. ' WHERE Device = ' . $bDeviceInt
-				. ' AND Point IN (' . $ptLiterals . ')'
-				. ' AND DateNV = ?'
-				. ' ORDER BY Point, Id ASC';
-			$params = [$bDate];
+	$rows = [];
+	while ($raw = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
+		$heure = trim((string)($raw['Heure'] ?? ''));
+		if ($heure === '') {
+			continue;
 		}
 
-		$stmt = sqlsrv_query($connLog, $sql, $params);
-		if ($stmt === false) {
-			$sqlErrs = sqlsrv_errors() ?: [];
-			apiLogsRespond(500, [
-				'success' => false,
-				'error'   => 'Erreur SQL batch',
-				'details' => implode(' | ', array_column($sqlErrs, 'message')),
-			]);
-		}
-		while ($row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
-			$pt = (int) $row['Pt'];
-			if ($pt === 1 && $needsIndex) {
-				$bResult['-1'][] = $row['Heure'];
-			}
-			if (isset($bResult[(string) $pt])) {
-				$bResult[(string) $pt][] = $row['Valeur'];
+		$row = ['Heure' => $heure];
+		foreach ($allPts as $pt) {
+			$key = 'P' . (int)$pt;
+			if (array_key_exists($key, $raw) && $raw[$key] !== null) {
+				$row[$key] = (string)$raw[$key];
 			}
 		}
-		sqlsrv_free_stmt($stmt);
+		$rows[] = $row;
+	}
+	sqlsrv_free_stmt($stmt);
+
+	if ($bEndpoints) {
+		$firstValues = [];
+		$lastValues = [];
+		$firstHeures = [];
+		$lastHeures = [];
+		foreach ($allPts as $pt) {
+			$firstValues[$pt] = null;
+			$lastValues[$pt] = null;
+			$firstHeures[$pt] = null;
+			$lastHeures[$pt] = null;
+		}
+
+		foreach ($rows as $row) {
+			$heure = (string)($row['Heure'] ?? '');
+			foreach ($allPts as $pt) {
+				$key = 'P' . $pt;
+				if (!array_key_exists($key, $row) || $row[$key] === null) {
+					continue;
+				}
+
+				$value = (string) $row[$key];
+				if ($firstValues[$pt] === null) {
+					$firstValues[$pt] = $value;
+					$firstHeures[$pt] = $heure;
+				}
+				$lastValues[$pt] = $value;
+				$lastHeures[$pt] = $heure;
+			}
+		}
+
+		foreach ($dataPts as $pt) {
+			$bResult[(string)$pt] = array_values(array_filter([
+				$firstValues[$pt],
+				$lastValues[$pt],
+			], static fn($value): bool => $value !== null && $value !== ''));
+		}
+
+		if ($needsIndex) {
+			$bResult['-1'] = array_values(array_filter([
+				$firstHeures[1],
+				$lastHeures[1],
+			], static fn($value): bool => $value !== null && $value !== ''));
+		}
+	} elseif ($bHeure !== '') {
+		$matchedRow = null;
+		foreach ($rows as $row) {
+			$heure = (string)($row['Heure'] ?? '');
+			if ($heure >= $bHeure) {
+				$matchedRow = $row;
+				break;
+			}
+		}
+
+		if (is_array($matchedRow)) {
+			foreach ($dataPts as $pt) {
+				$key = 'P' . $pt;
+				if (!array_key_exists($key, $matchedRow) || $matchedRow[$key] === null) {
+					continue;
+				}
+
+				$bResult[(string)$pt][] = (string) $matchedRow[$key];
+			}
+
+			if ($needsIndex && array_key_exists('P1', $matchedRow) && $matchedRow['P1'] !== null) {
+				$bResult['-1'][] = (string)($matchedRow['Heure'] ?? '');
+			}
+		}
+	} elseif ($bTop > 0) {
+		$limit = min($bTop, count($rows));
+		for ($rowIndex = 0; $rowIndex < $limit; $rowIndex++) {
+			$row = $rows[$rowIndex];
+			foreach ($dataPts as $pt) {
+				$key = 'P' . $pt;
+				if (!array_key_exists($key, $row) || $row[$key] === null) {
+					continue;
+				}
+
+				$bResult[(string)$pt][] = (string) $row[$key];
+			}
+
+			if ($needsIndex && array_key_exists('P1', $row) && $row['P1'] !== null) {
+				$bResult['-1'][] = (string)($row['Heure'] ?? '');
+			}
+		}
+	} else {
+		$rowIndex = 0;
+		foreach ($rows as $row) {
+			if ($bStep > 1 && ($rowIndex % $bStep) !== 0) {
+				$rowIndex++;
+				continue;
+			}
+
+			foreach ($dataPts as $pt) {
+				$key = 'P' . $pt;
+				if (!array_key_exists($key, $row) || $row[$key] === null) {
+					continue;
+				}
+
+				$bResult[(string)$pt][] = (string) $row[$key];
+			}
+
+			if ($needsIndex && array_key_exists('P1', $row) && $row['P1'] !== null) {
+				$bResult['-1'][] = (string)($row['Heure'] ?? '');
+			}
+
+			$rowIndex++;
+		}
 	}
 
 	// Stocker dans le cache
-	@file_put_contents($cacheFile, json_encode($bResult, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_NUMERIC_CHECK));
+	apiLogsWriteJsonCache($cacheFile, $bResult);
 
 	apiLogsRespond(200, $bResult);
 }
@@ -264,11 +425,9 @@ if ($device === '' || $point === '' || $date === null)
 	]);
 }
 
-$logDatabases = log_get_read_databases($date);
-$logSourceSql = apiLogsBuildLogSourceSql($logDatabases);
 $connLog = log_get_read_connection($date);
 
-if (!$connLog || $logSourceSql === '') {
+if (!$connLog) {
 	apiLogsRespond(500, [
 		'success' => false,
 		'error' => 'Connexion base logs indisponible',
@@ -278,12 +437,36 @@ if (!$connLog || $logSourceSql === '') {
 $deviceInt = (int) $device;
 $pointInt  = (int) $point;
 
+if ($point !== '-1' && ($pointInt < 0 || $pointInt > 500)) {
+	apiLogsRespond(400, [
+		'success' => false,
+		'error' => 'Point hors plage supportee pour V2',
+	]);
+}
+
 if ($point === "-1") {
-	$sql    = 'SELECT CAST(Heure AS nvarchar(10)) AS Valeur FROM (' . $logSourceSql . ') AS LogSource WHERE Device = ? AND Point = ? AND Date = ? ORDER BY Id ASC';
-	$params = [(string) $deviceInt, '1', $date];
+	$sql    = "
+SELECT Heure AS Valeur
+FROM dbo.LogWide WITH (NOLOCK)
+WHERE Device = ?
+	AND DateNV = ?
+	AND [P1] IS NOT NULL
+	AND Heure IS NOT NULL
+	AND LTRIM(RTRIM(CONVERT(NVARCHAR(16), Heure))) <> ''
+ORDER BY Heure ASC;
+";
+	$params = [$deviceInt, $date];
 } else {
-	$sql    = 'SELECT CAST(Valeur AS nvarchar(50)) AS Valeur FROM (' . $logSourceSql . ') AS LogSource WHERE Device = ? AND Point = ? AND Date = ? ORDER BY Id ASC';
-	$params = [(string) $deviceInt, (string) $pointInt, $date];
+	$pointColumn = apiLogsQuoteIdentifier('P' . $pointInt);
+	$sql    = "
+SELECT CONVERT(NVARCHAR(128), " . $pointColumn . ") AS Valeur
+FROM dbo.LogWide WITH (NOLOCK)
+WHERE Device = ?
+	AND DateNV = ?
+	AND " . $pointColumn . " IS NOT NULL
+ORDER BY Heure ASC;
+";
+	$params = [$deviceInt, $date];
 }
 
 $stmt = sqlsrv_query($connLog, $sql, $params);
@@ -292,7 +475,7 @@ if ($stmt === false) {
 	apiLogsRespond(500, [
 		'success' => false,
 		'error' => 'Erreur SQL',
-		'details' => sqlsrv_errors() ?: [],
+		'details' => apiLogsSqlErrorDetails(),
 	]);
 }
 
@@ -304,3 +487,11 @@ while ($row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_NUMERIC)) {
 sqlsrv_free_stmt($stmt);
 
 apiLogsRespond(200, $values);
+
+} catch (Throwable $e) {
+	apiLogsRespond(500, [
+		'success' => false,
+		'error' => 'Erreur interne du service',
+		'details' => $e->getMessage(),
+	]);
+}

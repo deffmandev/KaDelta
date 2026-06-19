@@ -7,9 +7,9 @@ declare(strict_types=1);
  * Appele par Srv.php toutes les ~60 secondes via file_get_contents.
  *
  * Responsabilites :
- *   1. Index de la base du mois courant (cree une seule fois par base)
+ *   1. Index de la base V2 du mois courant (cree une seule fois par base)
  *   2. UPDATE STATISTICS sur la journee courante (une fois par heure)
- *   3. Nettoyage des tables temporaires de migration dans toutes les bases KaLog_*
+ *   3. Nettoyage des tables temporaires de migration dans toutes les bases V2-*
  *   4. Purge du cache PHP expire (wwwroot/cache/)
  *   5. Nettoyage des vieux fichiers cache systeme (heritage ancien repertoire)
  *   6. CHECKPOINT sur les bases mensuelles + SHRINKFILE tempdb (une fois par 6h)
@@ -95,12 +95,12 @@ $state    = srvkl_load_state($stateFile);
 $stateChanged = false;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 1. Lister toutes les bases mensuelles existantes
+// 1. Lister toutes les bases mensuelles V2 existantes
 // ─────────────────────────────────────────────────────────────────────────────
 $dbsStmt = sqlsrv_query(
     $masterConn,
     "SELECT [name] FROM sys.databases WHERE [name] LIKE ? ORDER BY [name]",
-    [LOG_DATABASE_PREFIX . '%']
+    [LOG_DATABASE_V2_PREFIX . '%']
 );
 
 $monthlyDbs = [];
@@ -114,10 +114,10 @@ if ($dbsStmt !== false) {
     sqlsrv_free_stmt($dbsStmt);
 }
 
-$currentMonthDb = LOG_DATABASE_PREFIX . date('Ym');
+$currentMonthDb = LOG_DATABASE_V2_PREFIX . date('Ym');
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 2. Index des bases mensuelles (une fois par base, memorise dans l'etat)
+// 2. Index des bases mensuelles V2 (une fois par base, memorise dans l'etat)
 // ─────────────────────────────────────────────────────────────────────────────
 foreach ($monthlyDbs as $dbName) {
     $stateKey = 'index_done_' . $dbName;
@@ -134,42 +134,26 @@ foreach ($monthlyDbs as $dbName) {
     $sql = "
 IF NOT EXISTS (
     SELECT 1 FROM sys.indexes
-    WHERE name = 'IX_Log_Device_Point_Id' AND object_id = OBJECT_ID(N'dbo.Log')
+    WHERE name = 'UX_LogWide_DateNV_Heure_Device' AND object_id = OBJECT_ID(N'dbo.LogWide')
 )
 BEGIN
-    CREATE INDEX IX_Log_Device_Point_Id ON dbo.Log (Device, Point, Id);
+    CREATE UNIQUE INDEX UX_LogWide_DateNV_Heure_Device ON dbo.LogWide (DateNV, Heure, Device);
 END
 
 IF NOT EXISTS (
     SELECT 1 FROM sys.indexes
-    WHERE name = 'IX_Log_Device_Point_DateNV_Id' AND object_id = OBJECT_ID(N'dbo.Log')
+    WHERE name = 'IX_LogWide_DateNV_Heure' AND object_id = OBJECT_ID(N'dbo.LogWide')
 )
 BEGIN
-    CREATE INDEX IX_Log_Device_Point_DateNV_Id ON dbo.Log (Device, Point, DateNV, Id);
+    CREATE INDEX IX_LogWide_DateNV_Heure ON dbo.LogWide (DateNV, Heure) INCLUDE (Device);
 END
 
 IF NOT EXISTS (
     SELECT 1 FROM sys.indexes
-    WHERE name = 'IX_Log_DateNV_Device_Point_Id' AND object_id = OBJECT_ID(N'dbo.Log')
+    WHERE name = 'IX_LogWide_Device_DateNV_Heure' AND object_id = OBJECT_ID(N'dbo.LogWide')
 )
 BEGIN
-    CREATE INDEX IX_Log_DateNV_Device_Point_Id ON dbo.Log (DateNV, Device, Point, Id);
-END
-
-IF EXISTS (
-    SELECT 1 FROM sys.indexes
-    WHERE name = 'IX_Log_Device_Point' AND object_id = OBJECT_ID(N'dbo.Log')
-)
-BEGIN
-    DROP INDEX IX_Log_Device_Point ON dbo.Log;
-END
-
-IF EXISTS (
-    SELECT 1 FROM sys.indexes
-    WHERE name = 'IX_Log_Device_Point_DateNV' AND object_id = OBJECT_ID(N'dbo.Log')
-)
-BEGIN
-    DROP INDEX IX_Log_Device_Point_DateNV ON dbo.Log;
+    CREATE INDEX IX_LogWide_Device_DateNV_Heure ON dbo.LogWide (Device, DateNV, Heure);
 END
 ";
 
@@ -186,7 +170,7 @@ END
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 3. UPDATE STATISTICS sur la journee courante (base du mois en cours)
+// 3. UPDATE STATISTICS sur la journee courante (base V2 du mois en cours)
 //    Une fois par heure seulement — met a jour les stats pour les nouvelles
 //    lignes inserees depuis le dernier passage, ameliore les plans de requete.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -199,12 +183,12 @@ if (
 ) {
     $conn = log_open_connection($currentMonthDb);
     if ($conn !== false) {
-        // UPDATE STATISTICS cible uniquement l'index de recherche par date.
+        // UPDATE STATISTICS cible les index de recherche sur LogWide.
         // Permet a SQL Server d'avoir des estimations precises pour les
-        // requetes batch du jour sur IX_Log_Device_Point_DateNV_Id.
+        // requetes batch du jour sur V2.
         $statStmt = sqlsrv_query(
             $conn,
-            'UPDATE STATISTICS dbo.Log (IX_Log_Device_Point_DateNV_Id) WITH FULLSCAN;'
+            'UPDATE STATISTICS dbo.LogWide (IX_LogWide_Device_DateNV_Heure) WITH FULLSCAN; UPDATE STATISTICS dbo.LogWide (IX_LogWide_DateNV_Heure) WITH FULLSCAN;'
         );
 
         if ($statStmt !== false) {
@@ -220,7 +204,7 @@ if (
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 4. Nettoyage des tables temporaires de migration dans toutes les bases
+// 4. Nettoyage des tables temporaires de migration dans toutes les bases V2
 //    Rapide : simple requete systeme + DROP si trouve.
 // ─────────────────────────────────────────────────────────────────────────────
 $tempTablePatterns = "'LogMonthlyMigration'";
@@ -310,7 +294,7 @@ $shrinkKey      = 'tempdb_shrink';
 $shrinkInterval = 6 * 3600;
 
 if (empty($state[$shrinkKey]) || ($now - (int)$state[$shrinkKey]) >= $shrinkInterval) {
-    // CHECKPOINT sur toutes les bases mensuelles pour liberer les journaux
+    // CHECKPOINT sur toutes les bases mensuelles V2 pour liberer les journaux
     foreach ($monthlyDbs as $dbName) {
         $conn = log_open_connection($dbName);
         if ($conn === false) {

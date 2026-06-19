@@ -3226,20 +3226,27 @@ function parseOnOffValue(value) {
 }
 
 function normalizeAnalogSeries(indexes, values, series) {
-    const size = Math.min(indexes.length, values.length);
-    const labels = indexes.slice(0, size).map((value) => String(value));
-    const points = values.slice(0, size).map((value) => {
-        const numericValue = toNumericValueOrNull(value);
-        // null => gap Chart.js (apercu progressif peut avoir des trous)
+    const labels = indexes.map((value) => String(value));
+    const warnings = [];
+    const points = indexes.map((_, index) => {
+        const rawValue = index < values.length ? values[index] : null;
+        const numericValue = toNumericValueOrNull(rawValue);
+
         if (numericValue === null) {
+            if (rawValue !== null && rawValue !== undefined && String(rawValue).trim() !== '') {
+                warnings.push('valeur invalide ignoree a l\'index ' + labels[index]);
+            } else if (index >= values.length) {
+                warnings.push('valeur manquante ignoree a l\'index ' + labels[index]);
+            }
+
             return null;
         }
 
         return numericValue * series.multiplier;
     });
 
-    if (size === 0) {
-        throw new Error('Aucun point exploitable renvoye par l\'API pour ' + series.label + '.');
+    if (indexes.length === 0) {
+        warnings.push('aucun index exploitable renvoye par l\'API');
     }
 
     const filteredSeries = applyAnalogFilters(points, series);
@@ -3247,20 +3254,38 @@ function normalizeAnalogSeries(indexes, values, series) {
     return {
         labels,
         points: filteredSeries.points,
-        filteredCount: filteredSeries.filteredCount
+        filteredCount: filteredSeries.filteredCount,
+        warnings
     };
 }
 
 function normalizeOnOffSeries(indexes, values, series) {
-    const size = Math.min(indexes.length, values.length);
-    const labels = indexes.slice(0, size).map((value) => String(value));
-    const points = values.slice(0, size).map((value) => parseOnOffValue(value));
+    const labels = indexes.map((value) => String(value));
+    const warnings = [];
+    const points = indexes.map((_, index) => {
+        const rawValue = index < values.length ? values[index] : null;
 
-    if (size === 0) {
-        throw new Error('Aucun point exploitable renvoye par l\'API pour ' + series.label + '.');
+        if (rawValue === null || rawValue === undefined || String(rawValue).trim() === '') {
+            if (index >= values.length) {
+                warnings.push('valeur manquante ignoree a l\'index ' + labels[index]);
+            }
+            return null;
+        }
+
+        const parsedValue = parseOnOffValue(rawValue);
+        if (Number.isNaN(parsedValue)) {
+            warnings.push('valeur ON/OFF invalide ignoree a l\'index ' + labels[index]);
+            return null;
+        }
+
+        return parsedValue;
+    });
+
+    if (indexes.length === 0) {
+        warnings.push('aucun index exploitable renvoye par l\'API');
     }
 
-    return { labels, points };
+    return { labels, points, warnings };
 }
 
 function setSharedYAxisWidth(scale) {
@@ -3401,7 +3426,7 @@ function buildZoomOptions() {
         },
         zoom: {
             wheel: {
-                enabled: true
+                enabled: false
             },
             pinch: {
                 enabled: true
@@ -3543,6 +3568,13 @@ function bindCrosshair(chartInstance) {
     });
 }
 
+function bindDoubleClickReset(chartInstance) {
+    chartInstance.canvas.addEventListener('dblclick', (event) => {
+        event.preventDefault();
+        resetAllZoom();
+    });
+}
+
 function destroyCharts() {
     syncedCharts.forEach((chartInstance) => {
         chartInstance.destroy();
@@ -3675,6 +3707,7 @@ function createCharts() {
         syncedCharts.push(analogChart);
         bindCrosshair(analogChart);
         bindRightMousePan(analogChart);
+        bindDoubleClickReset(analogChart);
     } else {
         analogPanel.classList.add('vg-hidden');
     }
@@ -3774,6 +3807,7 @@ function createCharts() {
         syncedCharts.push(pressureChart);
         bindCrosshair(pressureChart);
         bindRightMousePan(pressureChart);
+        bindDoubleClickReset(pressureChart);
     } else {
         if (pressurePanel) { pressurePanel.classList.add('vg-hidden'); }
     }
@@ -3884,6 +3918,7 @@ function createCharts() {
         syncedCharts.push(onOffChart);
         bindCrosshair(onOffChart);
         bindRightMousePan(onOffChart);
+        bindDoubleClickReset(onOffChart);
     } else {
         if (onOffChartWrap) {
             onOffChartWrap.style.removeProperty('--vg-onoff-chart-height');
@@ -4157,8 +4192,25 @@ function applyDataToCharts(dataByDevice, seriesList, resetZoom) {
     normalizedPressureSeries.forEach((series) => { finalSize = Math.min(finalSize, series.normalized.points.length); });
     normalizedOnOffSeries.forEach((series) => { finalSize = Math.min(finalSize, series.normalized.points.length); });
 
+    const warnings = [];
+    normalizedAnalogSeries.forEach((series) => {
+        if (Array.isArray(series.normalized.warnings) && series.normalized.warnings.length > 0) {
+            warnings.push(series.label + ' valeurs signalees: ' + series.normalized.warnings.join(', '));
+        }
+    });
+    normalizedPressureSeries.forEach((series) => {
+        if (Array.isArray(series.normalized.warnings) && series.normalized.warnings.length > 0) {
+            warnings.push(series.label + ' valeurs signalees: ' + series.normalized.warnings.join(', '));
+        }
+    });
+    normalizedOnOffSeries.forEach((series) => {
+        if (Array.isArray(series.normalized.warnings) && series.normalized.warnings.length > 0) {
+            warnings.push(series.label + ' valeurs signalees: ' + series.normalized.warnings.join(', '));
+        }
+    });
+
     if (finalSize === 0) {
-        throw new Error('Aucun point commun exploitable entre les series configurees.');
+        warnings.push('aucun point commun exploitable entre les series configurees');
     }
 
     if (analogChart) {
@@ -4192,7 +4244,7 @@ function applyDataToCharts(dataByDevice, seriesList, resetZoom) {
 
     if (resetZoom) { resetAllZoom(); }
 
-    return { normalizedAnalogSeries, normalizedPressureSeries, normalizedOnOffSeries, finalSize, indexes };
+    return { normalizedAnalogSeries, normalizedPressureSeries, normalizedOnOffSeries, finalSize, indexes, warnings };
 }
 
 async function loadCurve(resetZoomOnSuccess) {
@@ -4257,31 +4309,19 @@ async function loadCurve(resetZoomOnSuccess) {
         hideBgProgress();
         const fullResult = applyDataToCharts(fullData, seriesList, true);
 
-        const detailParts = [];
-        fullResult.normalizedAnalogSeries.forEach((series) => {
-            if (fullResult.indexes.length !== series.normalized.points.length) {
-                detailParts.push(series.label + ' tronquee aux index');
-            }
-            if (series.normalized.filteredCount > 0) {
-                detailParts.push(series.label + ' filtres appliques: ' + series.normalized.filteredCount + ' point(s)');
-            }
-            if (Array.isArray(series.filterWarnings) && series.filterWarnings.length > 0) {
-                detailParts.push(series.label + ' filtres ignores: ' + series.filterWarnings.join(', '));
-            }
-        });
-        fullResult.normalizedPressureSeries.forEach((series) => {
-            if (fullResult.indexes.length !== series.normalized.points.length) {
-                detailParts.push(series.label + ' tronquee aux index');
-            }
-        });
-        fullResult.normalizedOnOffSeries.forEach((series) => {
-            if (fullResult.indexes.length !== series.normalized.points.length) {
-                detailParts.push(series.label + ' tronquee aux index');
-            }
-        });
-        if (detailParts.length === 0) { detailParts.push('aucun ajustement'); }
+        const hasMissingData =
+            fullResult.normalizedAnalogSeries.some((series) => fullResult.indexes.length !== series.normalized.points.length)
+            || fullResult.normalizedPressureSeries.some((series) => fullResult.indexes.length !== series.normalized.points.length)
+            || fullResult.normalizedOnOffSeries.some((series) => fullResult.indexes.length !== series.normalized.points.length)
+            || fullResult.normalizedAnalogSeries.some((series) => Number(series.normalized.filteredCount || 0) > 0)
+            || fullResult.normalizedAnalogSeries.some((series) => Array.isArray(series.filterWarnings) && series.filterWarnings.length > 0)
+            || (Array.isArray(fullResult.warnings) && fullResult.warnings.length > 0);
 
-        setStatus('Donnees completes chargees (' + fullResult.finalSize + ' pts). ' + detailParts.join(', ') + '.', false);
+        if (hasMissingData) {
+            setStatus('Donnees chargees (' + fullResult.finalSize + ' pts).', false);
+        } else {
+            setStatus('Donnees completes chargees (' + fullResult.finalSize + ' pts).', false);
+        }
     } catch (error) {
         hideBgProgress();
         setStatus('Echec du chargement: ' + (error instanceof Error ? error.message : 'Erreur inconnue'), true);

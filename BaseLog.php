@@ -30,9 +30,11 @@ $connLogDatabaseName = null;
 $logConnectionCache = [];
 $logTransactionLogCapCache = [];
 $logSchemaCache = [];
+$logWideSchemaCache = [];
 
 define('LOG_DATABASE_LEGACY_NAME', 'KaLog');
 define('LOG_DATABASE_PREFIX', 'KaLog_');
+define('LOG_DATABASE_V2_PREFIX', 'V2-');
 define('LOG_MIGRATION_REGISTRY_TABLE', 'dbo.LogMonthlyMigration');
 define('LOG_MIGRATION_REGISTRY_FILE', __DIR__ . '/kalog_monthly_migration_registry.json');
 define('LOG_AUTOGROW_FILE_NAME', 'KaLog_AutoExt1');
@@ -125,6 +127,17 @@ function log_month_database_name($dateValue = null)
     }
 
     return LOG_DATABASE_PREFIX . $parsed->format('Ym');
+}
+
+function log_month_v2_database_name($dateValue = null)
+{
+    $normalized = log_normalize_date_string($dateValue);
+    $parsed = DateTime::createFromFormat('d-m-Y', $normalized);
+    if (!($parsed instanceof DateTime)) {
+        $parsed = new DateTime('now');
+    }
+
+    return LOG_DATABASE_V2_PREFIX . $parsed->format('Ym');
 }
 
 function log_month_key_from_date($dateValue = null)
@@ -352,6 +365,136 @@ function log_ensure_database_schema_once($databaseName)
     return $ok;
 }
 
+function log_wide_point_columns()
+{
+    $columns = [];
+    for ($point = 0; $point <= 500; $point++) {
+        $columns[] = '[P' . $point . '] FLOAT NULL';
+    }
+
+    return implode(",\n        ", $columns);
+}
+
+function log_wide_point_column_list()
+{
+    $columns = [];
+    for ($point = 0; $point <= 500; $point++) {
+        $columns[] = '[P' . $point . ']';
+    }
+
+    return $columns;
+}
+
+function log_ensure_wide_schema($databaseName)
+{
+    $conn = log_open_connection($databaseName);
+    if ($conn === false) {
+        log_report_sql_error('log_ensure_wide_schema.connect');
+        return false;
+    }
+
+    $pointColumnsSql = log_wide_point_columns();
+    $sql = "
+IF OBJECT_ID(N'dbo.LogWide', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.LogWide (
+        Id BIGINT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        DateNV NVARCHAR(10) NOT NULL,
+        Heure CHAR(5) NOT NULL,
+        Device INT NOT NULL,
+        " . $pointColumnsSql . "
+    );
+END
+
+IF COL_LENGTH(N'dbo.LogWide', N'CreatedAt') IS NOT NULL
+BEGIN
+    DECLARE @dfCreatedAt sysname;
+    SELECT @dfCreatedAt = dc.name
+    FROM sys.default_constraints dc
+    INNER JOIN sys.columns c ON c.default_object_id = dc.object_id
+    INNER JOIN sys.tables t ON t.object_id = c.object_id
+    INNER JOIN sys.schemas s ON s.schema_id = t.schema_id
+    WHERE s.name = N'dbo' AND t.name = N'LogWide' AND c.name = N'CreatedAt';
+
+    IF @dfCreatedAt IS NOT NULL
+    BEGIN
+        DECLARE @dropCreatedAtSql NVARCHAR(4000);
+        SET @dropCreatedAtSql = N'ALTER TABLE dbo.LogWide DROP CONSTRAINT ' + QUOTENAME(@dfCreatedAt) + N';';
+        EXEC(@dropCreatedAtSql);
+    END
+
+    ALTER TABLE dbo.LogWide DROP COLUMN CreatedAt;
+END
+
+IF COL_LENGTH(N'dbo.LogWide', N'UpdatedAt') IS NOT NULL
+BEGIN
+    DECLARE @dfUpdatedAt sysname;
+    SELECT @dfUpdatedAt = dc.name
+    FROM sys.default_constraints dc
+    INNER JOIN sys.columns c ON c.default_object_id = dc.object_id
+    INNER JOIN sys.tables t ON t.object_id = c.object_id
+    INNER JOIN sys.schemas s ON s.schema_id = t.schema_id
+    WHERE s.name = N'dbo' AND t.name = N'LogWide' AND c.name = N'UpdatedAt';
+
+    IF @dfUpdatedAt IS NOT NULL
+    BEGIN
+        DECLARE @dropUpdatedAtSql NVARCHAR(4000);
+        SET @dropUpdatedAtSql = N'ALTER TABLE dbo.LogWide DROP CONSTRAINT ' + QUOTENAME(@dfUpdatedAt) + N';';
+        EXEC(@dropUpdatedAtSql);
+    END
+
+    ALTER TABLE dbo.LogWide DROP COLUMN UpdatedAt;
+END
+
+IF NOT EXISTS (
+    SELECT 1 FROM sys.indexes
+    WHERE name = 'UX_LogWide_DateNV_Heure_Device' AND object_id = OBJECT_ID(N'dbo.LogWide')
+)
+BEGIN
+    CREATE UNIQUE INDEX UX_LogWide_DateNV_Heure_Device ON dbo.LogWide (DateNV, Heure, Device);
+END
+
+IF NOT EXISTS (
+    SELECT 1 FROM sys.indexes
+    WHERE name = 'IX_LogWide_DateNV_Heure' AND object_id = OBJECT_ID(N'dbo.LogWide')
+)
+BEGIN
+    CREATE INDEX IX_LogWide_DateNV_Heure ON dbo.LogWide (DateNV, Heure) INCLUDE (Device);
+END
+
+IF NOT EXISTS (
+    SELECT 1 FROM sys.indexes
+    WHERE name = 'IX_LogWide_Device_DateNV_Heure' AND object_id = OBJECT_ID(N'dbo.LogWide')
+)
+BEGIN
+    CREATE INDEX IX_LogWide_Device_DateNV_Heure ON dbo.LogWide (Device, DateNV, Heure);
+END
+";
+
+    $stmt = sqlsrv_query($conn, $sql);
+    if ($stmt === false) {
+        log_report_sql_error('log_ensure_wide_schema.sql');
+        return false;
+    }
+
+    sqlsrv_free_stmt($stmt);
+    return true;
+}
+
+function log_ensure_wide_schema_once($databaseName)
+{
+    global $logWideSchemaCache;
+
+    $databaseName = (string)$databaseName;
+    if (array_key_exists($databaseName, $logWideSchemaCache)) {
+        return $logWideSchemaCache[$databaseName] === true;
+    }
+
+    $ok = log_ensure_wide_schema($databaseName);
+    $logWideSchemaCache[$databaseName] = $ok === true;
+    return $ok;
+}
+
 function log_create_month_database($databaseName)
 {
     if (log_database_exists($databaseName)) {
@@ -390,12 +533,52 @@ function log_create_month_database($databaseName)
     return true;
 }
 
+function log_create_v2_database($databaseName)
+{
+    if (log_database_exists($databaseName)) {
+        if (!log_ensure_wide_schema_once($databaseName)) {
+            return false;
+        }
+
+        log_enforce_transaction_log_limit($databaseName);
+        return true;
+    }
+
+    $masterConn = log_open_connection('master');
+    if ($masterConn === false) {
+        log_report_sql_error('log_create_v2_database.connect_master');
+        return false;
+    }
+
+    $createSql = 'CREATE DATABASE ' . log_quote_identifier($databaseName);
+    $stmt = sqlsrv_query($masterConn, $createSql);
+    if ($stmt === false) {
+        log_report_sql_error('log_create_v2_database.create_db');
+        return false;
+    }
+    sqlsrv_free_stmt($stmt);
+
+    if (!log_database_exists($databaseName)) {
+        error_log('[LOG] Creation de base non confirmee pour ' . $databaseName . '.');
+        return false;
+    }
+
+    if (!log_ensure_wide_schema_once($databaseName)) {
+        return false;
+    }
+
+    log_enforce_transaction_log_limit($databaseName);
+    return true;
+}
+
 function log_enforce_transaction_log_limit($databaseName)
 {
     global $logTransactionLogCapCache;
 
     $databaseName = (string)$databaseName;
-    if ($databaseName === '' || strpos($databaseName, LOG_DATABASE_PREFIX) !== 0) {
+    $isMonthly = strpos($databaseName, LOG_DATABASE_PREFIX) === 0;
+    $isV2 = strpos($databaseName, LOG_DATABASE_V2_PREFIX) === 0;
+    if ($databaseName === '' || (!$isMonthly && !$isV2)) {
         return true;
     }
 
@@ -460,9 +643,9 @@ MODIFY FILE (NAME = N'{$logicalNameSql}', FILEGROWTH = {$growthKb}KB, MAXSIZE = 
 
 function log_get_write_connection($dateValue = null)
 {
-    $databaseName = log_month_database_name($dateValue);
+    $databaseName = log_month_v2_database_name($dateValue);
 
-    if (!log_database_exists($databaseName) && !log_create_month_database($databaseName)) {
+    if (!log_database_exists($databaseName) && !log_create_v2_database($databaseName)) {
         return false;
     }
 
@@ -472,7 +655,7 @@ function log_get_write_connection($dateValue = null)
         return false;
     }
 
-    if (!log_ensure_database_schema_once($databaseName)) {
+    if (!log_ensure_wide_schema_once($databaseName)) {
         return false;
     }
 
@@ -482,15 +665,79 @@ function log_get_write_connection($dateValue = null)
     return log_set_default_connection($databaseName, $conn);
 }
 
-function log_get_read_databases($dateValue = null)
+function log_upsert_wide_point($dateValue, $heureValue, $device, $point, $valeur)
 {
-    $monthDatabase = log_month_database_name($dateValue);
+    global $connLog;
 
-    if (log_database_exists($monthDatabase)) {
-        return [$monthDatabase];
+    $pointInt = (int)$point;
+    if ($pointInt < 0 || $pointInt > 500) {
+        return true;
     }
 
-    return [];
+    $date = trim((string)$dateValue);
+    $heure = trim((string)$heureValue);
+    if ($date === '' || $heure === '') {
+        return false;
+    }
+
+    $v2DatabaseName = log_month_v2_database_name($date);
+    if (!log_database_exists($v2DatabaseName) && !log_create_v2_database($v2DatabaseName)) {
+        log_report_sql_error('log_upsert_wide_point.create_v2_db');
+        return false;
+    }
+
+    $v2Conn = log_open_connection($v2DatabaseName);
+    if ($v2Conn === false) {
+        log_report_sql_error('log_upsert_wide_point.connect_v2');
+        return false;
+    }
+
+    if (!log_ensure_wide_schema_once($v2DatabaseName)) {
+        return false;
+    }
+
+    $column = '[P' . $pointInt . ']';
+    $sql = "
+MERGE dbo.LogWide WITH (HOLDLOCK) AS tgt
+USING (
+    SELECT
+        CAST(? AS NVARCHAR(10)) AS DateNV,
+        CAST(? AS CHAR(5)) AS Heure,
+        CAST(? AS INT) AS Device,
+        TRY_CONVERT(FLOAT, ?) AS PointValue
+) AS src
+ON tgt.DateNV = src.DateNV
+AND tgt.Heure = src.Heure
+AND tgt.Device = src.Device
+WHEN MATCHED THEN
+    UPDATE SET
+        " . $column . " = src.PointValue
+WHEN NOT MATCHED THEN
+    INSERT (DateNV, Heure, Device, " . $column . ")
+    VALUES (src.DateNV, src.Heure, src.Device, src.PointValue);
+";
+
+    $params = [(string)$date, (string)$heure, (int)$device, (string)$valeur];
+    $stmt = sqlsrv_query($v2Conn, $sql, $params);
+    if ($stmt === false) {
+        log_report_sql_error('log_upsert_wide_point.merge');
+        return false;
+    }
+
+    sqlsrv_free_stmt($stmt);
+    return true;
+}
+
+function log_get_read_databases($dateValue = null)
+{
+    $monthDatabase = log_month_v2_database_name($dateValue);
+    $databases = [];
+
+    if (log_database_exists($monthDatabase)) {
+        $databases[] = $monthDatabase;
+    }
+
+    return $databases;
 }
 
 function log_get_read_connection($dateValue = null)
@@ -662,36 +909,14 @@ function LogIn($device, $point, $valeur)
 {
     $date  = (string) date('d-m-Y');
     $heure = (string) date('H:i');
-    // DateNV = meme valeur que Date : permet l'index seek sur IX_Log_Device_Point_DateNV_Id
-    $sql    = 'INSERT INTO Log (Date, Heure, Device, Point, Valeur, DateNV) VALUES (?, ?, ?, ?, ?, ?)';
-    $params = [$date, $heure, (string)$device, (string)$point, (string)$valeur, $date];
-    global $connLog;
-    if ($connLog === false && log_get_write_connection($date) === false) {
+    if (log_get_write_connection($date) === false) {
         log_report_sql_error('LogIn.connect');
         return;
     }
 
-    $stmt = sqlsrv_query($connLog, $sql, $params);
-    if ($stmt !== false) {
-        sqlsrv_free_stmt($stmt);
-        return;
+    if (!log_upsert_wide_point($date, $heure, $device, $point, $valeur)) {
+        log_report_sql_error('LogIn.upsert_wide');
     }
-
-    if (log_is_db_full_error()) {
-        static $spaceExtendedThisRun = false;
-
-        if (!$spaceExtendedThisRun && log_ensure_database_space()) {
-            $spaceExtendedThisRun = true;
-
-            $retryStmt = sqlsrv_query($connLog, $sql, $params);
-            if ($retryStmt !== false) {
-                sqlsrv_free_stmt($retryStmt);
-                return;
-            }
-        }
-    }
-
-    log_report_sql_error('mssql');
 }
 
 
