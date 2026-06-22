@@ -3980,12 +3980,25 @@ async function fetchBatchData(seriesList, step, top, endpoints, heure) {
     });
     const deviceKeys = Object.keys(devicePointsMap);
     const dataByDevice = {};
+    let successCount = 0;
     for (const device of deviceKeys) {
         const points = Array.from(devicePointsMap[device]);
         const url = buildBatchApiUrl(device, points, step, top || 0, endpoints || false, heure || '');
-        const data = await fetchJsonObject(url);
-        dataByDevice[device] = data;
+        try {
+            const data = await fetchJsonObject(url);
+            dataByDevice[device] = data;
+            successCount += 1;
+        } catch (error) {
+            // Tolere un device en erreur: on conserve les autres series chargeables.
+            console.warn('[Batch] device ignore (erreur API):', device, error);
+            dataByDevice[device] = {};
+        }
     }
+
+    if (successCount === 0) {
+        throw new Error('Aucune reponse exploitable retournee par ApiLogs.');
+    }
+
     return dataByDevice;
 }
 
@@ -4005,6 +4018,15 @@ function minutesToHeure(m) {
 // Extrait la plage horaire (first, last) depuis les donnees endpoints
 // dataByDevice[device]['-1'] est un tableau de strings "HH:MM"
 function extractTimeRange(endpointsData, seriesList) {
+    const preferredDevice = String(graphContext.defaultDevice || '');
+
+    if (preferredDevice !== '') {
+        const preferredRows = endpointsData[preferredDevice]?.['-1'];
+        if (Array.isArray(preferredRows) && preferredRows.length >= 2) {
+            return { first: preferredRows[0], last: preferredRows[preferredRows.length - 1] };
+        }
+    }
+
     for (const series of seriesList) {
         const rows = endpointsData[String(series.device)]?.['-1'];
         if (Array.isArray(rows) && rows.length >= 2) {
@@ -4012,6 +4034,37 @@ function extractTimeRange(endpointsData, seriesList) {
         }
     }
     return null;
+}
+
+function resolveIndexDevice(dataByDevice, seriesList) {
+    const preferredDevice = String(graphContext.defaultDevice || '');
+    if (preferredDevice !== '') {
+        const preferredIndexes = (dataByDevice[preferredDevice] || {})['-1'];
+        if (Array.isArray(preferredIndexes) && preferredIndexes.length > 0) {
+            return preferredDevice;
+        }
+    }
+
+    for (const series of seriesList) {
+        const device = String(series.device || '');
+        if (device === '') {
+            continue;
+        }
+
+        const indexes = (dataByDevice[device] || {})['-1'];
+        if (Array.isArray(indexes) && indexes.length > 0) {
+            return device;
+        }
+    }
+
+    for (const device of Object.keys(dataByDevice || {})) {
+        const indexes = (dataByDevice[device] || {})['-1'];
+        if (Array.isArray(indexes) && indexes.length > 0) {
+            return device;
+        }
+    }
+
+    return preferredDevice !== '' ? preferredDevice : String(seriesList[0]?.device || graphContext.defaultDevice || '');
 }
 
 // ── Dictionnaire de l'apercu progressif ───────────────────────────────────
@@ -4092,8 +4145,8 @@ async function fetchBatchDataParallel(seriesList, step) {
 // Lit previewMap[device][heure][pt], pas d'alignement positionnel a gerer
 // Index X = heures triees du tableau, valeur = previewMap[device][heure][pt] * multiplier
 function applyPreviewToCharts(previewMap, seriesList) {
-    const firstDevice = String(seriesList[0].device || graphContext.defaultDevice);
-    const sortedHeures = Object.keys(previewMap[firstDevice] || {}).sort();
+    const indexDevice = resolveIndexDevice(previewMap, seriesList);
+    const sortedHeures = Object.keys(previewMap[indexDevice] || {}).sort();
     if (sortedHeures.length === 0) { return; }
 
     // Bati les donnees pour chaque serie a partir du tableau
@@ -4163,10 +4216,22 @@ function applyPreviewToCharts(previewMap, seriesList) {
 }
 
 function applyDataToCharts(dataByDevice, seriesList, resetZoom) {
-    const firstDevice = String(seriesList[0].device || graphContext.defaultDevice);
-    const indexes = Array.isArray((dataByDevice[firstDevice] || {})['-1'])
-        ? dataByDevice[firstDevice]['-1']
+    const indexDevice = resolveIndexDevice(dataByDevice, seriesList);
+    let indexes = Array.isArray((dataByDevice[indexDevice] || {})['-1'])
+        ? dataByDevice[indexDevice]['-1']
         : [];
+
+    // Si le device prioritaire n'a pas d'index exploitables, on prend le premier
+    // device qui en retourne pour ne pas bloquer tout le rendu.
+    if (!Array.isArray(indexes) || indexes.length === 0) {
+        for (const candidateDevice of Object.keys(dataByDevice || {})) {
+            const candidateIndexes = (dataByDevice[candidateDevice] || {})['-1'];
+            if (Array.isArray(candidateIndexes) && candidateIndexes.length > 0) {
+                indexes = candidateIndexes;
+                break;
+            }
+        }
+    }
 
     const normalizedAnalogSeries = analogSeriesConfig.map((series) => {
         const nextSeries = copyGraphObject(series);

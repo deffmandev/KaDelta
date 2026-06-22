@@ -210,6 +210,21 @@ if (isset($_GET['batch']) && $_GET['batch'] === '1') {
 			array_unshift($allPts, 1);
 		}
 	}
+	$indexPts = count($dataPts) > 0 ? $dataPts : [1];
+	$hasIndexForRow = static function (array $row) use ($indexPts): bool {
+		foreach ($indexPts as $pt) {
+			$key = 'P' . (int)$pt;
+			if (!array_key_exists($key, $row) || $row[$key] === null) {
+				continue;
+			}
+
+			if (trim((string)$row[$key]) !== '') {
+				return true;
+			}
+		}
+
+		return false;
+	};
 	foreach ($dataPts as $pt) {
 		$bResult[(string) $pt] = [];
 	}
@@ -222,7 +237,7 @@ if (isset($_GET['batch']) && $_GET['batch'] === '1') {
 		apiLogsRespond(500, ['success' => false, 'error' => 'Impossible de creer le cache local']);
 	}
 	$sortedPts = $allPts; sort($sortedPts);
-	$cacheKey  = 'apilogs_' . md5('v2|' . $bDeviceInt . '|' . implode(',', $sortedPts) . '|' . $bDate . '|s' . $bStep . 't' . $bTop . ($bEndpoints ? 'e1' : '') . ($bHeure !== '' ? 'h' . $bHeure : ''));
+	$cacheKey  = 'apilogs_' . md5('v3|' . $bDeviceInt . '|' . implode(',', $sortedPts) . '|' . $bDate . '|s' . $bStep . 't' . $bTop . ($bEndpoints ? 'e1' : '') . ($bHeure !== '' ? 'h' . $bHeure : ''));
 	$cacheFile = $cacheDir . DIRECTORY_SEPARATOR . $cacheKey . '.json';
 	$isToday   = ($bDate === date('d-m-Y'));
 	$cacheTtl  = $isToday ? 90 : (7 * 24 * 3600);
@@ -300,6 +315,8 @@ ORDER BY Heure ASC;
 		$lastValues = [];
 		$firstHeures = [];
 		$lastHeures = [];
+		$firstIndexHeure = null;
+		$lastIndexHeure = null;
 		foreach ($allPts as $pt) {
 			$firstValues[$pt] = null;
 			$lastValues[$pt] = null;
@@ -323,6 +340,13 @@ ORDER BY Heure ASC;
 				$lastValues[$pt] = $value;
 				$lastHeures[$pt] = $heure;
 			}
+
+			if ($hasIndexForRow($row)) {
+				if ($firstIndexHeure === null) {
+					$firstIndexHeure = $heure;
+				}
+				$lastIndexHeure = $heure;
+			}
 		}
 
 		foreach ($dataPts as $pt) {
@@ -334,8 +358,8 @@ ORDER BY Heure ASC;
 
 		if ($needsIndex) {
 			$bResult['-1'] = array_values(array_filter([
-				$firstHeures[1],
-				$lastHeures[1],
+				$firstIndexHeure,
+				$lastIndexHeure,
 			], static fn($value): bool => $value !== null && $value !== ''));
 		}
 	} elseif ($bHeure !== '') {
@@ -358,7 +382,7 @@ ORDER BY Heure ASC;
 				$bResult[(string)$pt][] = (string) $matchedRow[$key];
 			}
 
-			if ($needsIndex && array_key_exists('P1', $matchedRow) && $matchedRow['P1'] !== null) {
+			if ($needsIndex && $hasIndexForRow($matchedRow)) {
 				$bResult['-1'][] = (string)($matchedRow['Heure'] ?? '');
 			}
 		}
@@ -375,7 +399,7 @@ ORDER BY Heure ASC;
 				$bResult[(string)$pt][] = (string) $row[$key];
 			}
 
-			if ($needsIndex && array_key_exists('P1', $row) && $row['P1'] !== null) {
+			if ($needsIndex && $hasIndexForRow($row)) {
 				$bResult['-1'][] = (string)($row['Heure'] ?? '');
 			}
 		}
@@ -396,7 +420,7 @@ ORDER BY Heure ASC;
 				$bResult[(string)$pt][] = (string) $row[$key];
 			}
 
-			if ($needsIndex && array_key_exists('P1', $row) && $row['P1'] !== null) {
+			if ($needsIndex && $hasIndexForRow($row)) {
 				$bResult['-1'][] = (string)($row['Heure'] ?? '');
 			}
 
