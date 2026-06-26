@@ -18,6 +18,9 @@ $__srvinlog_start = microtime(true);
 include "base.php";
 include "BaseLog.php";
 
+$dateLog = (string)date('d-m-Y');
+$heureLog = (string)date('H:i');
+
 
 // Enregistrer les valeurs des unités dans la table de log de chaque unites 
 $Sql="SELECT * FROM ValUnites";
@@ -29,18 +32,25 @@ if ($Res) {
 
         $Id = (int)$Row['Id'];
         $numbres++;
-        for ($i = 1; $i <= 7; $i++)
-            LogIn($Id,$i, $Row[$i]);
+
+        $pointValues = [];
+        for ($i = 1; $i <= 7; $i++) {
+            if (array_key_exists($i, $Row)) {
+                $pointValues[$i] = $Row[$i];
+            }
+        }
+
+        if (!log_upsert_wide_points($dateLog, $heureLog, $Id, $pointValues)) {
+            log_report_sql_error('SrvInLog.ValUnites.upsert_points');
+        }
     }
 }   
 
 echo "Nombre d'unités enregistrées : $numbres\n";
-    $date  = (string) date('d-m-Y');
-    $heure = (string) date('H:i');
-echo "Date : $date, Heure : $heure\n";
+echo "Date : $dateLog, Heure : $heureLog\n";
 
 // Fonction pour enregistrer les valeurs Lennox depuis un fichier JSON
-function LogLennox($Id,$Path)
+function LogLennox($Id, $Path, $dateLog, $heureLog)
 {
 $jsonPath = __DIR__ . '/'.$Path;
 if (is_file($jsonPath)) {
@@ -57,25 +67,36 @@ if (is_file($jsonPath)) {
     error_log('SrvInLog: Lennox1.json not found');
 }
 
-// Enregistrer les données dans la table de log des 200 points Modbus 
-if (isset($lennoxData) && is_array($lennoxData)) 
-    {
-    foreach ($lennoxData as $key => $value) 
-        {
-        $index = (int)$key;
-        LogIn($Id, $index, $value);
+// Enregistrer toutes les donnees de l'unite en une seule ecriture SQL.
+if (isset($lennoxData) && is_array($lennoxData)) {
+    $pointValues = [];
+    foreach ($lennoxData as $key => $value) {
+        if (!is_numeric($key)) {
+            continue;
         }
+
+        $index = (int)$key;
+        if ($index < 0 || $index > 500) {
+            continue;
+        }
+
+        $pointValues[$index] = $value;
     }
+
+    if (!log_upsert_wide_points($dateLog, $heureLog, $Id, $pointValues)) {
+        log_report_sql_error('SrvInLog.LogLennox.upsert_points');
+    }
+}
 }
 
 // Enregistrer les valeurs Lennox depuis le fichier JSON de chaque groupes 
-    LogLennox(501,'Lennox1.json');
-    LogLennox(502,'Lennox2.json');
-    LogLennox(503,'Lennox3.json');
+    LogLennox(501,'Lennox1.json', $dateLog, $heureLog);
+    LogLennox(502,'Lennox2.json', $dateLog, $heureLog);
+    LogLennox(503,'Lennox3.json', $dateLog, $heureLog);
 
 
 // Afficher le temps d'exécution total
 $__srvinlog_end = microtime(true);
 $__srvinlog_elapsed = $__srvinlog_end - $__srvinlog_start;
-echo "\nTemps d'exécution SrvInLog: " . number_format($__srvinlog_elapsed, 3, ',', '') . " secondes\n";
+echo "\n\rTemps d'exécution SrvInLog: " . number_format($__srvinlog_elapsed, 3, ',', '') . " secondes\n\r";
 ?>

@@ -3225,6 +3225,25 @@ function parseOnOffValue(value) {
     return numericValue >= 1 ? 1 : 0;
 }
 
+function duplicatePreviousValue(points) {
+    const filled = points.slice();
+    let lastValue = null;
+
+    for (let index = 0; index < filled.length; index++) {
+        const value = filled[index];
+        if (value === null || value === undefined || Number.isNaN(Number(value))) {
+            if (lastValue !== null) {
+                filled[index] = lastValue;
+            }
+            continue;
+        }
+
+        lastValue = Number(value);
+    }
+
+    return filled;
+}
+
 function normalizeAnalogSeries(indexes, values, series) {
     const labels = indexes.map((value) => String(value));
     const warnings = [];
@@ -3249,7 +3268,8 @@ function normalizeAnalogSeries(indexes, values, series) {
         warnings.push('aucun index exploitable renvoye par l\'API');
     }
 
-    const filteredSeries = applyAnalogFilters(points, series);
+    const pointsFilled = duplicatePreviousValue(points);
+    const filteredSeries = applyAnalogFilters(pointsFilled, series);
 
     return {
         labels,
@@ -3281,11 +3301,13 @@ function normalizeOnOffSeries(indexes, values, series) {
         return parsedValue;
     });
 
+    const pointsFilled = duplicatePreviousValue(points);
+
     if (indexes.length === 0) {
         warnings.push('aucun index exploitable renvoye par l\'API');
     }
 
-    return { labels, points, warnings };
+    return { labels, points: pointsFilled, warnings };
 }
 
 function setSharedYAxisWidth(scale) {
@@ -3551,6 +3573,33 @@ function bindRightMousePan(chartInstance) {
     });
 }
 
+function bindRightMouseWheelZoom(chartInstance) {
+    chartInstance.canvas.addEventListener('wheel', (event) => {
+        // Zoom uniquement si bouton droit maintenu + molette.
+        const isRightButtonPressed = (event.buttons & 2) === 2;
+        const isRightPanChart = !!rightMousePanState && rightMousePanState.chart === chartInstance;
+        if (!isRightButtonPressed && !isRightPanChart) {
+            return;
+        }
+
+        if (typeof chartInstance.zoom !== 'function') {
+            return;
+        }
+
+        if (!chartInstance.scales || !chartInstance.scales.x) {
+            return;
+        }
+
+        event.preventDefault();
+
+        const zoomStep = 0.12;
+        const zoomFactor = event.deltaY < 0 ? (1 + zoomStep) : (1 / (1 + zoomStep));
+
+        chartInstance.zoom({ x: zoomFactor }, 'none');
+        syncZoomWindow(chartInstance);
+    }, { passive: false });
+}
+
 function bindCrosshair(chartInstance) {
     chartInstance.canvas.addEventListener('mousemove', (event) => {
         if (rightMousePanState) {
@@ -3707,6 +3756,7 @@ function createCharts() {
         syncedCharts.push(analogChart);
         bindCrosshair(analogChart);
         bindRightMousePan(analogChart);
+        bindRightMouseWheelZoom(analogChart);
         bindDoubleClickReset(analogChart);
     } else {
         analogPanel.classList.add('vg-hidden');
@@ -3807,6 +3857,7 @@ function createCharts() {
         syncedCharts.push(pressureChart);
         bindCrosshair(pressureChart);
         bindRightMousePan(pressureChart);
+        bindRightMouseWheelZoom(pressureChart);
         bindDoubleClickReset(pressureChart);
     } else {
         if (pressurePanel) { pressurePanel.classList.add('vg-hidden'); }
@@ -3918,6 +3969,7 @@ function createCharts() {
         syncedCharts.push(onOffChart);
         bindCrosshair(onOffChart);
         bindRightMousePan(onOffChart);
+        bindRightMouseWheelZoom(onOffChart);
         bindDoubleClickReset(onOffChart);
     } else {
         if (onOffChartWrap) {
@@ -4215,39 +4267,79 @@ function applyPreviewToCharts(previewMap, seriesList) {
     redrawSyncedCharts();
 }
 
-function applyDataToCharts(dataByDevice, seriesList, resetZoom) {
-    const indexDevice = resolveIndexDevice(dataByDevice, seriesList);
-    let indexes = Array.isArray((dataByDevice[indexDevice] || {})['-1'])
-        ? dataByDevice[indexDevice]['-1']
-        : [];
-
-    // Si le device prioritaire n'a pas d'index exploitables, on prend le premier
-    // device qui en retourne pour ne pas bloquer tout le rendu.
-    if (!Array.isArray(indexes) || indexes.length === 0) {
-        for (const candidateDevice of Object.keys(dataByDevice || {})) {
-            const candidateIndexes = (dataByDevice[candidateDevice] || {})['-1'];
-            if (Array.isArray(candidateIndexes) && candidateIndexes.length > 0) {
-                indexes = candidateIndexes;
-                break;
-            }
-        }
+function normalizeHeureLabel(value) {
+    const raw = String(value || '').trim();
+    if (!raw) {
+        return '';
     }
+
+    const match = raw.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+    if (!match) {
+        return raw;
+    }
+
+    const hh = String(parseInt(match[1], 10)).padStart(2, '0');
+    const mm = String(parseInt(match[2], 10)).padStart(2, '0');
+    return hh + ':' + mm;
+}
+
+function buildUnifiedIndexesByHeure(dataByDevice) {
+    const heureSet = new Set();
+
+    Object.keys(dataByDevice || {}).forEach((device) => {
+        const deviceIndexes = (dataByDevice[device] || {})['-1'];
+        if (!Array.isArray(deviceIndexes)) {
+            return;
+        }
+
+        deviceIndexes.forEach((heure) => {
+            const normalized = normalizeHeureLabel(heure);
+            if (normalized) {
+                heureSet.add(normalized);
+            }
+        });
+    });
+
+    return Array.from(heureSet).sort();
+}
+
+function buildAlignedValuesByHeure(dataByDevice, device, point, targetIndexes) {
+    const deviceKey = String(device);
+    const pointKey = String(point);
+    const sourceIndexes = ((dataByDevice[deviceKey] || {})['-1']) || [];
+    const sourceValues = ((dataByDevice[deviceKey] || {})[pointKey]) || [];
+
+    const valueByHeure = new Map();
+    for (let i = 0; i < sourceIndexes.length; i++) {
+        const heure = normalizeHeureLabel(sourceIndexes[i]);
+        if (!heure || valueByHeure.has(heure)) {
+            continue;
+        }
+
+        valueByHeure.set(heure, i < sourceValues.length ? sourceValues[i] : null);
+    }
+
+    return targetIndexes.map((heure) => (valueByHeure.has(heure) ? valueByHeure.get(heure) : null));
+}
+
+function applyDataToCharts(dataByDevice, seriesList, resetZoom) {
+    const indexes = buildUnifiedIndexesByHeure(dataByDevice);
 
     const normalizedAnalogSeries = analogSeriesConfig.map((series) => {
         const nextSeries = copyGraphObject(series);
-        const values = ((dataByDevice[String(series.device)] || {})[String(series.point)]) || [];
+        const values = buildAlignedValuesByHeure(dataByDevice, series.device, series.point, indexes);
         nextSeries.normalized = normalizeAnalogSeries(indexes, values, series);
         return nextSeries;
     });
     const normalizedPressureSeries = pressureSeriesConfig.map((series) => {
         const nextSeries = copyGraphObject(series);
-        const values = ((dataByDevice[String(series.device)] || {})[String(series.point)]) || [];
+        const values = buildAlignedValuesByHeure(dataByDevice, series.device, series.point, indexes);
         nextSeries.normalized = normalizeAnalogSeries(indexes, values, series);
         return nextSeries;
     });
     const normalizedOnOffSeries = onOffSeriesConfig.map((series) => {
         const nextSeries = copyGraphObject(series);
-        const values = ((dataByDevice[String(series.device)] || {})[String(series.point)]) || [];
+        const values = buildAlignedValuesByHeure(dataByDevice, series.device, series.point, indexes);
         nextSeries.normalized = normalizeOnOffSeries(indexes, values, series);
         return nextSeries;
     });
@@ -4449,8 +4541,12 @@ nextDayButton.addEventListener('click', () => shiftDate(1));
 reloadButton.addEventListener('click', loadCurve);
 resetZoomButton.addEventListener('click', resetAllZoom);
 window.addEventListener('mousemove', handleRightMousePanMove);
-window.addEventListener('mouseup', stopRightMousePan);
-window.addEventListener('blur', stopRightMousePan);
+window.addEventListener('mouseup', (event) => {
+    stopRightMousePan();
+});
+window.addEventListener('blur', () => {
+    stopRightMousePan();
+});
 
 initGraphView();
 </script>

@@ -89,37 +89,6 @@ function apiLogsSqlErrorDetails(): string
 	return implode(' | ', $messages);
 }
 
-function apiLogsReadJsonCache(string $path): ?array
-{
-	if (!is_file($path) || !is_readable($path)) {
-		return null;
-	}
-
-	$content = @file_get_contents($path);
-	if (!is_string($content) || trim($content) === '') {
-		return null;
-	}
-
-	$decoded = json_decode($content, true);
-	if (!is_array($decoded)) {
-		@unlink($path);
-		return null;
-	}
-
-	return $decoded;
-}
-
-function apiLogsWriteJsonCache(string $path, array $payload): bool
-{
-	$directory = dirname($path);
-	if (!is_dir($directory) && !@mkdir($directory, 0750, true) && !is_dir($directory)) {
-		return false;
-	}
-
-	$json = apiLogsJsonEncode($payload);
-	return @file_put_contents($path, $json, LOCK_EX) !== false;
-}
-
 function apiLogsRespond(int $statusCode, array $payload): void
 {
 	if (ob_get_level()) { ob_clean(); } // supprime tout output parasite avant JSON
@@ -170,12 +139,42 @@ function apiLogsBuildWideSelectColumns(array $pointNumbers, bool $includeHeure =
 	return implode(', ', $columns);
 }
 
+function apiLogsHeureToSeconds(string $heure): ?int
+{
+	$value = trim($heure);
+	if ($value === '') {
+		return null;
+	}
+
+	if (!preg_match('/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/', $value, $matches)) {
+		return null;
+	}
+
+	$h = (int) $matches[1];
+	$m = (int) $matches[2];
+	$s = isset($matches[3]) ? (int) $matches[3] : 0;
+
+	if ($h < 0 || $h > 23 || $m < 0 || $m > 59 || $s < 0 || $s > 59) {
+		return null;
+	}
+
+	return ($h * 3600) + ($m * 60) + $s;
+}
+
+function apiLogsSecondsToHeureLabel(int $seconds): string
+{
+	$h = intdiv($seconds, 3600);
+	$m = intdiv($seconds % 3600, 60);
+
+	return str_pad((string) $h, 2, '0', STR_PAD_LEFT) . ':' . str_pad((string) $m, 2, '0', STR_PAD_LEFT);
+}
+
 try {
 
 // ── Mode batch ──────────────────────────────────────────────────────────────
 // GET ?batch=1&device=X&points=-1,1,2,5&date=dd-mm-yyyy
 // Retourne un objet JSON : { "-1": [...], "1": [...], "2": [...], "5": [...] }
-// point=-1 → Heure (index X) via Point=1 ; autres points → Valeur
+// point=-1 → Heure (index X) ; autres points → Valeur (ou null si manquante)
 if (isset($_GET['batch']) && $_GET['batch'] === '1') {
 	$bDevice    = isset($_GET['device'])    ? trim((string) $_GET['device'])    : '';
 	$bPointsRaw = isset($_GET['points'])    ? trim((string) $_GET['points'])    : '';
@@ -206,67 +205,14 @@ if (isset($_GET['batch']) && $_GET['batch'] === '1') {
 	$allPts  = $dataPts;
 	if ($needsIndex) {
 		$bResult['-1'] = [];
-		if (!in_array(1, $allPts, true)) {
-			array_unshift($allPts, 1);
-		}
 	}
-	$indexPts = count($dataPts) > 0 ? $dataPts : [1];
-	$hasIndexForRow = static function (array $row) use ($indexPts): bool {
-		foreach ($indexPts as $pt) {
-			$key = 'P' . (int)$pt;
-			if (!array_key_exists($key, $row) || $row[$key] === null) {
-				continue;
-			}
-
-			if (trim((string)$row[$key]) !== '') {
-				return true;
-			}
-		}
-
-		return false;
-	};
 	foreach ($dataPts as $pt) {
 		$bResult[(string) $pt] = [];
 	}
 
-	// ── Cache fichier ────────────────────────────────────────────────────────
-	// Jours passes : cache 7 jours (donnees immuables)
-	// Aujourd'hui  : cache 90 secondes (donnees live)
-	$cacheDir = __DIR__ . DIRECTORY_SEPARATOR . 'cache';
-	if (!is_dir($cacheDir) && !@mkdir($cacheDir, 0750, true) && !is_dir($cacheDir)) {
-		apiLogsRespond(500, ['success' => false, 'error' => 'Impossible de creer le cache local']);
-	}
-	$sortedPts = $allPts; sort($sortedPts);
-	$cacheKey  = 'apilogs_' . md5('v3|' . $bDeviceInt . '|' . implode(',', $sortedPts) . '|' . $bDate . '|s' . $bStep . 't' . $bTop . ($bEndpoints ? 'e1' : '') . ($bHeure !== '' ? 'h' . $bHeure : ''));
-	$cacheFile = $cacheDir . DIRECTORY_SEPARATOR . $cacheKey . '.json';
-	$isToday   = ($bDate === date('d-m-Y'));
-	$cacheTtl  = $isToday ? 90 : (7 * 24 * 3600);
-
-	// Nettoyage periodique : 1 chance sur 200 de purger les fichiers expires
-	if (random_int(1, 200) === 1 && is_dir($cacheDir)) {
-		$nowTs = time();
-		foreach (glob($cacheDir . DIRECTORY_SEPARATOR . 'apilogs_*.json') ?: [] as $oldFile) {
-			if ($nowTs - @filemtime($oldFile) > (7 * 24 * 3600)) {
-				@unlink($oldFile);
-			}
-		}
-	}
-
-	if (is_file($cacheFile)) {
-		$cacheAge = time() - filemtime($cacheFile);
-		if ($cacheAge < $cacheTtl) {
-			$cached = apiLogsReadJsonCache($cacheFile);
-			if (is_array($cached)) {
-				apiLogsRespond(200, $cached);
-			}
-		} else {
-			@unlink($cacheFile);
-		}
-	}
-
 	set_time_limit(0);
 
-	if (count($allPts) === 0) {
+	if (count($allPts) === 0 && !$needsIndex) {
 		apiLogsRespond(500, [
 			'success' => false,
 			'error' => 'Aucun point valide a interroger dans LogWide',
@@ -281,7 +227,7 @@ WHERE Device = ?
 	AND DateNV = ?
 	AND Heure IS NOT NULL
 	AND LTRIM(RTRIM(CONVERT(NVARCHAR(16), Heure))) <> ''
-ORDER BY Heure ASC;
+ORDER BY TRY_CONVERT(time(0), Heure) ASC, Heure ASC;
 ";
 	$stmt = sqlsrv_query($connLog, $sql, [$bDeviceInt, $bDate]);
 	if ($stmt === false) {
@@ -294,142 +240,89 @@ ORDER BY Heure ASC;
 
 	$rows = [];
 	while ($raw = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
-		$heure = trim((string)($raw['Heure'] ?? ''));
-		if ($heure === '') {
+		$heureRaw = trim((string)($raw['Heure'] ?? ''));
+		$heureSeconds = apiLogsHeureToSeconds($heureRaw);
+		if ($heureRaw === '' || $heureSeconds === null) {
 			continue;
 		}
 
-		$row = ['Heure' => $heure];
+		$row = [
+			'Heure' => apiLogsSecondsToHeureLabel($heureSeconds),
+			'_HeureSeconds' => $heureSeconds,
+		];
 		foreach ($allPts as $pt) {
 			$key = 'P' . (int)$pt;
-			if (array_key_exists($key, $raw) && $raw[$key] !== null) {
-				$row[$key] = (string)$raw[$key];
+			if (array_key_exists($key, $raw)) {
+				$row[$key] = $raw[$key] !== null ? (string)$raw[$key] : null;
 			}
 		}
 		$rows[] = $row;
 	}
 	sqlsrv_free_stmt($stmt);
 
-	if ($bEndpoints) {
-		$firstValues = [];
-		$lastValues = [];
-		$firstHeures = [];
-		$lastHeures = [];
-		$firstIndexHeure = null;
-		$lastIndexHeure = null;
-		foreach ($allPts as $pt) {
-			$firstValues[$pt] = null;
-			$lastValues[$pt] = null;
-			$firstHeures[$pt] = null;
-			$lastHeures[$pt] = null;
-		}
+	usort($rows, static function (array $a, array $b): int {
+		return ((int)($a['_HeureSeconds'] ?? 0)) <=> ((int)($b['_HeureSeconds'] ?? 0));
+	});
 
-		foreach ($rows as $row) {
-			$heure = (string)($row['Heure'] ?? '');
-			foreach ($allPts as $pt) {
-				$key = 'P' . $pt;
-				if (!array_key_exists($key, $row) || $row[$key] === null) {
-					continue;
-				}
+	$rowSource = $rows;
 
-				$value = (string) $row[$key];
-				if ($firstValues[$pt] === null) {
-					$firstValues[$pt] = $value;
-					$firstHeures[$pt] = $heure;
-				}
-				$lastValues[$pt] = $value;
-				$lastHeures[$pt] = $heure;
-			}
-
-			if ($hasIndexForRow($row)) {
-				if ($firstIndexHeure === null) {
-					$firstIndexHeure = $heure;
-				}
-				$lastIndexHeure = $heure;
-			}
+	$appendRowToResult = static function (array $row) use (&$bResult, $dataPts, $needsIndex): void {
+		if ($needsIndex) {
+			$bResult['-1'][] = (string)($row['Heure'] ?? '');
 		}
 
 		foreach ($dataPts as $pt) {
-			$bResult[(string)$pt] = array_values(array_filter([
-				$firstValues[$pt],
-				$lastValues[$pt],
-			], static fn($value): bool => $value !== null && $value !== ''));
+			$key = 'P' . $pt;
+			$bResult[(string)$pt][] = array_key_exists($key, $row) ? $row[$key] : null;
 		}
+	};
 
-		if ($needsIndex) {
-			$bResult['-1'] = array_values(array_filter([
-				$firstIndexHeure,
-				$lastIndexHeure,
-			], static fn($value): bool => $value !== null && $value !== ''));
+	if ($bEndpoints) {
+		if (count($rowSource) > 0) {
+			$appendRowToResult($rowSource[0]);
+			if (count($rowSource) > 1) {
+				$appendRowToResult($rowSource[count($rowSource) - 1]);
+			}
 		}
 	} elseif ($bHeure !== '') {
+		$targetSeconds = apiLogsHeureToSeconds($bHeure);
+		if ($targetSeconds === null) {
+			apiLogsRespond(400, [
+				'success' => false,
+				'error' => 'Parametre heure invalide (attendu HH:MM)',
+			]);
+		}
+
 		$matchedRow = null;
-		foreach ($rows as $row) {
-			$heure = (string)($row['Heure'] ?? '');
-			if ($heure >= $bHeure) {
+		foreach ($rowSource as $row) {
+			$rowSeconds = (int)($row['_HeureSeconds'] ?? -1);
+			if ($rowSeconds >= $targetSeconds) {
 				$matchedRow = $row;
 				break;
 			}
 		}
 
 		if (is_array($matchedRow)) {
-			foreach ($dataPts as $pt) {
-				$key = 'P' . $pt;
-				if (!array_key_exists($key, $matchedRow) || $matchedRow[$key] === null) {
-					continue;
-				}
-
-				$bResult[(string)$pt][] = (string) $matchedRow[$key];
-			}
-
-			if ($needsIndex && $hasIndexForRow($matchedRow)) {
-				$bResult['-1'][] = (string)($matchedRow['Heure'] ?? '');
-			}
+			$appendRowToResult($matchedRow);
 		}
 	} elseif ($bTop > 0) {
-		$limit = min($bTop, count($rows));
+		$limit = min($bTop, count($rowSource));
 		for ($rowIndex = 0; $rowIndex < $limit; $rowIndex++) {
-			$row = $rows[$rowIndex];
-			foreach ($dataPts as $pt) {
-				$key = 'P' . $pt;
-				if (!array_key_exists($key, $row) || $row[$key] === null) {
-					continue;
-				}
-
-				$bResult[(string)$pt][] = (string) $row[$key];
-			}
-
-			if ($needsIndex && $hasIndexForRow($row)) {
-				$bResult['-1'][] = (string)($row['Heure'] ?? '');
-			}
+			$appendRowToResult($rowSource[$rowIndex]);
 		}
 	} else {
 		$rowIndex = 0;
-		foreach ($rows as $row) {
+		foreach ($rowSource as $row) {
 			if ($bStep > 1 && ($rowIndex % $bStep) !== 0) {
 				$rowIndex++;
 				continue;
 			}
 
-			foreach ($dataPts as $pt) {
-				$key = 'P' . $pt;
-				if (!array_key_exists($key, $row) || $row[$key] === null) {
-					continue;
-				}
-
-				$bResult[(string)$pt][] = (string) $row[$key];
-			}
-
-			if ($needsIndex && $hasIndexForRow($row)) {
-				$bResult['-1'][] = (string)($row['Heure'] ?? '');
-			}
+			$appendRowToResult($row);
 
 			$rowIndex++;
 		}
 	}
-
-	// Stocker dans le cache
-	apiLogsWriteJsonCache($cacheFile, $bResult);
 
 	apiLogsRespond(200, $bResult);
 }
@@ -474,10 +367,9 @@ SELECT Heure AS Valeur
 FROM dbo.LogWide WITH (NOLOCK)
 WHERE Device = ?
 	AND DateNV = ?
-	AND [P1] IS NOT NULL
 	AND Heure IS NOT NULL
 	AND LTRIM(RTRIM(CONVERT(NVARCHAR(16), Heure))) <> ''
-ORDER BY Heure ASC;
+ORDER BY TRY_CONVERT(time(0), Heure) ASC, Heure ASC;
 ";
 	$params = [$deviceInt, $date];
 } else {

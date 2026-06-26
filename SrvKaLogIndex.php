@@ -14,7 +14,7 @@ declare(strict_types=1);
  *   5. Nettoyage des vieux fichiers cache systeme (heritage ancien repertoire)
  *   6. CHECKPOINT sur les bases mensuelles + SHRINKFILE tempdb (une fois par 6h)
  */
-
+exit(0); // desactive temporairement le script pour debug Srv.php
 ini_set('display_errors', '0');
 define('LOG_SKIP_AUTO_BOOTSTRAP', true);
 require_once __DIR__ . '/BaseLog.php';

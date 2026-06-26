@@ -44,10 +44,11 @@ define('LOG_AUTOGROW_STEP_MB', 1024); // 1 Go
 define('LOG_TRANSACTION_LOG_MAX_KB', 184320); // 180 Mo
 define('LOG_TRANSACTION_LOG_GROWTH_KB', 4096); // 4 Mo
 define('LOG_DELETE_PROTECTION_ENABLED', true);
+define('LOG_USE_EXTERNAL_SQL_ERROR_HANDLER', false);
 
 function log_report_sql_error($context = '')
 {
-    if (function_exists('logSqlError')) {
+    if (LOG_USE_EXTERNAL_SQL_ERROR_HANDLER && function_exists('logSqlError')) {
         logSqlError($context);
         return;
     }
@@ -721,6 +722,109 @@ WHEN NOT MATCHED THEN
     $stmt = sqlsrv_query($v2Conn, $sql, $params);
     if ($stmt === false) {
         log_report_sql_error('log_upsert_wide_point.merge');
+        return false;
+    }
+
+    sqlsrv_free_stmt($stmt);
+    return true;
+}
+
+function log_normalize_point_map($pointValues)
+{
+    $normalized = [];
+    if (!is_array($pointValues)) {
+        return $normalized;
+    }
+
+    foreach ($pointValues as $key => $value) {
+        $pointInt = null;
+
+        if (is_int($key) || (is_string($key) && preg_match('/^-?\d+$/', $key))) {
+            $pointInt = (int)$key;
+        } elseif (is_string($key) && preg_match('/^P(\d+)$/i', $key, $matches)) {
+            $pointInt = (int)$matches[1];
+        }
+
+        if ($pointInt === null || $pointInt < 0 || $pointInt > 500) {
+            continue;
+        }
+
+        $normalized[$pointInt] = $value;
+    }
+
+    ksort($normalized);
+    return $normalized;
+}
+
+function log_upsert_wide_points($dateValue, $heureValue, $device, $pointValues)
+{
+    $date = trim((string)$dateValue);
+    $heure = trim((string)$heureValue);
+    if ($date === '' || $heure === '') {
+        return false;
+    }
+
+    $normalizedMap = log_normalize_point_map($pointValues);
+    if (count($normalizedMap) === 0) {
+        return true;
+    }
+
+    $v2DatabaseName = log_month_v2_database_name($date);
+    if (!log_database_exists($v2DatabaseName) && !log_create_v2_database($v2DatabaseName)) {
+        log_report_sql_error('log_upsert_wide_points.create_v2_db');
+        return false;
+    }
+
+    $v2Conn = log_open_connection($v2DatabaseName);
+    if ($v2Conn === false) {
+        log_report_sql_error('log_upsert_wide_points.connect_v2');
+        return false;
+    }
+
+    if (!log_ensure_wide_schema_once($v2DatabaseName)) {
+        return false;
+    }
+
+    $srcSelectParts = [
+        'CAST(? AS NVARCHAR(10)) AS DateNV',
+        'CAST(? AS CHAR(5)) AS Heure',
+        'CAST(? AS INT) AS Device',
+    ];
+
+    $updateParts = [];
+    $insertColumns = ['DateNV', 'Heure', 'Device'];
+    $insertValues = ['src.DateNV', 'src.Heure', 'src.Device'];
+    $params = [(string)$date, (string)$heure, (int)$device];
+
+    foreach ($normalizedMap as $pointInt => $pointValue) {
+        $column = '[P' . $pointInt . ']';
+        $srcSelectParts[] = 'TRY_CONVERT(FLOAT, ?) AS ' . $column;
+        $updateParts[] = $column . ' = src.' . $column;
+        $insertColumns[] = $column;
+        $insertValues[] = 'src.' . $column;
+        $params[] = ($pointValue === null) ? null : (string)$pointValue;
+    }
+
+    $sql = "
+MERGE dbo.LogWide WITH (HOLDLOCK) AS tgt
+USING (
+    SELECT
+        " . implode(",\n        ", $srcSelectParts) . "
+) AS src
+ON tgt.DateNV = src.DateNV
+AND tgt.Heure = src.Heure
+AND tgt.Device = src.Device
+WHEN MATCHED THEN
+    UPDATE SET
+        " . implode(",\n        ", $updateParts) . "
+WHEN NOT MATCHED THEN
+    INSERT (" . implode(', ', $insertColumns) . ")
+    VALUES (" . implode(', ', $insertValues) . ");
+";
+
+    $stmt = sqlsrv_query($v2Conn, $sql, $params);
+    if ($stmt === false) {
+        log_report_sql_error('log_upsert_wide_points.merge');
         return false;
     }
 
